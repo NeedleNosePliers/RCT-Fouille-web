@@ -22,6 +22,7 @@ html,body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.45 var(-
 header.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;margin:6px 0 16px}
 header.top h1{font:600 1.7rem/1.1 var(--tech);margin:0}
 header.top p{margin:0;color:var(--muted);font-size:.95rem}
+.app-ver{display:inline-block;margin-left:6px;font:600 .8rem var(--tech);color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:1px 6px}
 .savebar{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 #save-status{font-size:.82rem;color:var(--muted)}
 #save-status::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#3B8B4B;margin-right:6px;vertical-align:1px}
@@ -217,7 +218,7 @@ details.panel[open] summary{margin-bottom:12px}
 <div class="app">
   <header class="top">
     <h1>Relevé de fouille</h1>
-    <p>Cotes terrain → volumes, 3D, plan, coupes, photos et PDF.</p>
+    <p>Cotes terrain → volumes, 3D, plan, coupes, photos et PDF. <span class="app-ver" id="app-ver"></span></p>
     <div class="savebar">
       <span id="save-status" role="status">Sauvegarde automatique active</span>
       <button type="button" class="btn" id="new-releve">Nouveau relevé</button>
@@ -382,6 +383,8 @@ details.panel[open] summary{margin-bottom:12px}
 <script>
 (function(){
 'use strict';
+var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '1.8';
+var APP_LABEL = APP_NAME + ' Ver.' + APP_VERSION;
 var TECH = 'Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif';
 var BODY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 var DEMO_MAT = 'Grave ciment';
@@ -1390,7 +1393,7 @@ function fouillePages(f, multi, head, chantierTable, obsTable, c){
   var comTable = '<table>' + row('Commentaire', com ? esc(com).replace(/\n/g, '<br>') : '') + '</table>';
   var notes = '<ul class="r-notes"><li>Volumes en place, non foisonnés, calculés à partir des cotes relevées sur le terrain.</li>';
   if(state.vex !== 1) notes += '<li>Vue 3D : exagération verticale ×' + state.vex + ' (affichage uniquement, cotes en valeurs réelles).</li>';
-  notes += '<li>Vues 2D à l\'échelle, sans exagération.</li></ul>';
+  notes += '<li>Vues 2D à l\'échelle, sans exagération.</li><li>Document généré avec ' + APP_LABEL + '.</li></ul>';
 
   var html = '<section class="r-page">';
   if(multi){
@@ -1669,6 +1672,7 @@ $('pdf').addEventListener('click', function(){
 });
 window.addEventListener('beforeprint', function(){ if(state.step === 'result') buildReport(); });
 
+$('app-ver').textContent = APP_LABEL;
 (function initDate(){
   var d = new Date();
   $('date').value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
@@ -1934,6 +1938,7 @@ function buildPdfPages(progress){
       var notes = notesBase.slice();
       if(state.vex !== 1) notes.push('Vue 3D : exagération verticale ×' + state.vex + ' (affichage uniquement, cotes en valeurs réelles).');
       notes.push('Vues 2D à l\'échelle, sans exagération.');
+      notes.push('Document généré avec ' + APP_LABEL + '.');
       doc.text(notes, 15);
       // photos, 2 par page
       f.photos.forEach(function(p, i){
@@ -2010,7 +2015,7 @@ function pdfFromPages(pages, title){
     add(jpg);
     add('\nendstream\nendobj\n');
   });
-  obj(total, '<< /Producer (Releve de fouille) /Title (' + asciiPdf(title) + ') >>');
+  obj(total, '<< /Producer (' + asciiPdf(APP_LABEL) + ') /Title (' + asciiPdf(title) + ') >>');
   var xref = len;
   var x = 'xref\n0 ' + (total + 1) + '\n0000000000 65535 f \n';
   for(i = 1; i <= total; i++) x += String(offsets[i]).padStart(10, '0') + ' 00000 n \n';
@@ -2155,12 +2160,29 @@ function xrProject(view, p, w, h){
   if(c[3] <= 1e-4) return null;
   return [(c[0]/c[3] + 1)/2 * w, (1 - c[1]/c[3])/2 * h];
 }
+var xrGl = null; // un seul contexte graphique, réutilisé d'une mesure à l'autre
+function xrRelease(st){
+  // libère ancres et source de visée TANT QUE la session est active (après, Chrome les a déjà détruites)
+  st.pts.forEach(function(p){ if(p.anchor && p.anchor.delete){ try{ p.anchor.delete(); }catch(err){} p.anchor = null; } });
+  if(st.hitSource && st.hitSource.cancel){ try{ st.hitSource.cancel(); }catch(err){} }
+  st.hitSource = null;
+}
 function startWebXrMeasure(label){
   return new Promise(function(resolve, reject){
     var root = xrEl();
     $('xr-title').textContent = 'Mesure : ' + label;
     $('xr-result').textContent = '–';
-    var st = {pts:[], recent:[], add:false, undo:false, frozen:-1, done:false, anchors:false, hitPos:null, session:null, value:0, frames:0, userClosed:false, error:null, t0:Date.now()};
+    var st = {pts:[], recent:[], add:false, undo:false, frozen:-1, done:false, anchors:false, hitPos:null, session:null, value:0, frames:0, userClosed:false, error:null, t0:Date.now(), finished:false};
+    function finish(result){
+      if(st.finished) return;
+      st.finished = true;
+      resolve(result);
+    }
+    function closeSession(){
+      xrRelease(st);
+      var sess = st.session;
+      setTimeout(function(){ try{ if(sess) sess.end(); }catch(err){} }, 30);
+    }
     xr = st;
     var tips = $('xr-tips'), hideTips = false;
     try{ hideTips = localStorage.getItem('xrHideTips') === '1'; }catch(err){}
@@ -2173,12 +2195,26 @@ function startWebXrMeasure(label){
     };
     $('xr-add').onclick = function(){ st.add = true; };
     $('xr-undo').onclick = function(){ st.undo = true; };
-    $('xr-close').onclick = function(){ st.userClosed = true; if(st.session) st.session.end(); };
-    $('xr-ok').onclick = function(){ if(st.frozen > 0){ st.done = true; st.value = st.frozen; st.session.end(); } };
+    $('xr-close').onclick = function(){
+      if(st.finished) return;
+      st.userClosed = true;
+      finish({cancelled:true});
+      closeSession();
+    };
+    $('xr-ok').onclick = function(){
+      if(st.finished || !(st.frozen > 0)) return;
+      $('xr-ok').disabled = true;
+      st.done = true; st.value = st.frozen;
+      // la valeur est reportée tout de suite, avant la fermeture de la caméra
+      finish({cancelled:false, value:st.value});
+      closeSession();
+    };
     root.classList.add('on');
 
-    var canvas = document.createElement('canvas');
-    var gl = canvas.getContext('webgl', {xrCompatible:true, alpha:true});
+    if(!xrGl || (xrGl.isContextLost && xrGl.isContextLost())){
+      xrGl = document.createElement('canvas').getContext('webgl', {xrCompatible:true, alpha:true});
+    }
+    var gl = xrGl;
     navigator.xr.requestSession('immersive-ar', {
       requiredFeatures:['hit-test', 'dom-overlay'], optionalFeatures:['anchors'], domOverlay:{root:root}
     }).then(function(session){
@@ -2188,15 +2224,16 @@ function startWebXrMeasure(label){
       session.addEventListener('end', function(){
         root.classList.remove('on');
         xr = null;
-        st.pts.forEach(function(p){ if(p.anchor && p.anchor.delete) p.anchor.delete(); });
-        if(st.done){ resolve({cancelled:false, value:st.value}); return; }
-        if(st.userClosed){ resolve({cancelled:true}); return; }
+        st.hitSource = null;
+        if(st.finished) return;
+        if(st.done){ finish({cancelled:false, value:st.value}); return; }
+        if(st.userClosed){ finish({cancelled:true}); return; }
         var why;
         if(st.error) why = 'erreur pendant la mesure (' + st.error + ')';
         else if(!st.frames) why = 'le navigateur a fermé la caméra avant la première image (' + (Date.now() - st.t0) + ' ms)'
           + xrBrowserHint();
         else why = 'la caméra a été fermée par Chrome ou le système après ' + st.frames + ' images';
-        resolve({cancelled:true, error:why});
+        finish({cancelled:true, error:why});
       });
       return Promise.all([session.requestReferenceSpace('local'), session.requestReferenceSpace('viewer')]).then(function(sp){
         st.ref = sp[0];
@@ -2208,9 +2245,10 @@ function startWebXrMeasure(label){
       }).then(function(src){
         st.hitSource = src;
         session.requestAnimationFrame(function onFrame(t, frame){
+          if(st.finished) return; // plus d'images après validation ou fermeture
           st.frames++;
           try{ xrFrame(st, session, gl, frame); }
-          catch(err){ st.error = (err && err.message) || String(err); session.end(); return; }
+          catch(err){ st.error = (err && err.message) || String(err); xrRelease(st); try{ session.end(); }catch(e){} return; }
           session.requestAnimationFrame(onFrame);
         });
       });
@@ -2261,7 +2299,7 @@ function xrFrame(st, session, gl, frame){
       st.pts.push(pt);
       if(st.anchors){
         try{
-          frame.createAnchor(new XRRigidTransform({x:mean[0], y:mean[1], z:mean[2]}), st.ref).then(function(a){ pt.anchor = a; }).catch(function(){});
+          frame.createAnchor(new XRRigidTransform({x:mean[0], y:mean[1], z:mean[2]}), st.ref).then(function(a){ if(st.finished){ try{ a.delete(); }catch(err){} } else pt.anchor = a; }).catch(function(){});
         }catch(err){}
       }
       st.recent = [];
