@@ -1,0 +1,2659 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Relevé de fouille 3D</title>
+<style>
+:root{
+  --paper:#EDEFEA; --panel:#FFFFFF; --ink:#1E2830; --muted:#5E6A72; --line:#C9CEC6;
+  --tape:#F2B705; --terre:#B98A55; --err:#B3261E; --focus:#1565C0;
+  --tech: Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --paper:#161B1F; --panel:#20272C; --ink:#E6E9E4; --muted:#9AA5AC; --line:#38424A; --err:#F2B8B5; --focus:#8AB4F8; }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.45 var(--body)}
+.tape{height:6px;background:repeating-linear-gradient(135deg,var(--tape) 0 14px,#1E2830 14px 28px)}
+.app{max-width:1240px;margin:0 auto;padding:16px 14px 120px}
+header.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;margin:6px 0 16px}
+header.top h1{font:600 1.7rem/1.1 var(--tech);margin:0}
+header.top p{margin:0;color:var(--muted);font-size:.95rem}
+.savebar{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#save-status{font-size:.82rem;color:var(--muted)}
+#save-status::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#3B8B4B;margin-right:6px;vertical-align:1px}
+#save-status.pending::before{background:var(--tape)}
+#save-status.bad{color:var(--err)}
+#save-status.bad::before{background:var(--err)}
+.narrow{max-width:620px;margin:0 auto;display:grid;gap:14px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 14px 16px}
+.panel h2{font:600 1.15rem/1.2 var(--tech);margin:0 0 12px}
+.panel h3{font:600 1rem/1.2 var(--tech);margin:4px 0 6px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.span2{grid-column:1/-1}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:.86rem;color:var(--muted)}
+input[type=text],input[type=date],select,textarea{
+  font:16px var(--body);color:var(--ink);background:var(--paper);
+  border:1px solid var(--line);border-radius:6px;padding:9px 10px;width:100%;min-width:0}
+textarea{resize:vertical}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{flex:1;font:600 1rem var(--tech);padding:10px;border:0;background:var(--panel);color:var(--ink);cursor:pointer}
+.seg button[aria-checked=true]{background:var(--ink);color:var(--panel)}
+.seg button+button{border-left:1px solid var(--line)}
+.hint{font-size:.84rem;color:var(--muted);margin:6px 0 0}
+
+/* Cartouches */
+.carts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cart{background:var(--panel);border:2px solid var(--ink);border-radius:10px;padding:10px 12px 8px;display:flex;flex-direction:column;min-width:0}
+.cart label{font:600 .95rem/1.2 var(--tech)}
+.cart .sub{font-size:.78rem;color:var(--muted);min-height:1.1em}
+.cart-in{display:flex;align-items:baseline;gap:6px;margin-top:4px}
+.cart-in input{flex:1;min-width:0;border:0;border-bottom:2px solid var(--line);border-radius:0;background:transparent;
+  font:600 2rem/1.1 var(--tech);padding:4px 0;color:var(--ink)}
+.cart-in input:focus{border-bottom-color:var(--tape);outline:none}
+.cart-in span{font:600 1.1rem var(--tech);color:var(--muted)}
+.cart.bad{border-color:var(--err)}
+.cart.demo{border-style:dashed}
+.ar-btn{margin-top:8px;align-self:flex-start;display:inline-flex;align-items:center;gap:6px;font:600 .9rem var(--tech);padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);cursor:pointer}
+.ar-btn svg{width:18px;height:18px}
+.cart textarea{margin-top:6px;border:0;border-bottom:2px solid var(--line);border-radius:0;background:transparent;padding:4px 0;font:1rem/1.4 var(--body);min-height:4.2em}
+.cart textarea:focus{border-bottom-color:var(--tape);outline:none}
+.comment{margin-top:12px;padding:10px 12px;border-left:4px solid var(--tape);background:var(--paper);border-radius:0 6px 6px 0}
+.comment h3{margin:0 0 4px;font:600 .95rem var(--tech);color:var(--muted)}
+.comment p{margin:0;white-space:normal;overflow-wrap:anywhere}
+.errs{color:var(--err);margin:0;padding-left:18px}
+.check{display:flex;gap:10px;align-items:center;font-weight:600;cursor:pointer}
+.check input{width:22px;height:22px;accent-color:var(--ink);flex:none}
+details.panel summary{font:600 1.1rem var(--tech);cursor:pointer}
+details.panel[open] summary{margin-bottom:12px}
+
+/* Résultat */
+.fhead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.fhead h2{font:600 1.35rem/1.2 var(--tech);margin:0}
+.fbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:600 .95rem var(--tech);padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--ink);cursor:pointer;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip[aria-selected=true]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.tscroll{overflow-x:auto}
+.recap{width:100%;border-collapse:collapse;font-size:.9rem;min-width:620px}
+.recap th,.recap td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;white-space:nowrap}
+.recap td.n,.recap th.n{text-align:right;font-family:var(--tech)}
+.recap tr.tot td{font-weight:700;border-top:2px solid var(--ink)}
+.resbar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:14px}
+.resbar h2{font:600 1.35rem/1.2 var(--tech);margin:0}
+.layout{display:grid;gap:14px}
+@media (min-width:920px){ .layout{grid-template-columns:1fr 1fr;align-items:start} .full{grid-column:1/-1} }
+.res{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:0}
+.res div{background:var(--panel);padding:10px 12px;box-shadow:inset -1px -1px 0 var(--line)}
+.res dt{font-size:.82rem;color:var(--muted)}
+.res dd{margin:2px 0 0;font:600 1.45rem/1.1 var(--tech)}
+.res dd small{font-size:.85rem;font-weight:400;color:var(--muted)}
+.res .total{background:var(--ink);grid-column:1/-1}
+.res .total dt,.res .total dd,.res .total dd small{color:var(--panel)}
+.viewer{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+#cv{display:block;width:100%;aspect-ratio:4/3;touch-action:none;cursor:grab}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.btn{font:600 .95rem var(--tech);padding:8px 12px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn.on{background:var(--tape);color:#1E2830;border-color:var(--tape)}
+.btn.danger{color:var(--err)}
+.toolbar .vex{display:flex;align-items:center;gap:6px;margin-left:auto;font-size:.86rem;color:var(--muted)}
+.toolbar .vex select{width:auto;padding:6px 8px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.86rem;color:var(--muted);margin-top:8px}
+.sw{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:6px;border:1px solid var(--line)}
+#plan svg,.coupes svg{display:block;width:100%;height:auto}
+.coupes{display:grid;gap:12px;margin-top:12px}
+@media (min-width:640px){ .coupes{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))} }
+.coupes figure{margin:0}
+.coupes figcaption{font:600 1rem var(--tech);color:var(--muted);margin-bottom:4px}
+
+/* Photos */
+.photos{display:grid;gap:14px}
+@media (min-width:920px){ .photos{grid-template-columns:1fr 1fr} }
+.photo{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--paper)}
+.photo canvas{display:block;width:100%;height:auto;touch-action:pan-y}
+.photo canvas.editing{touch-action:none;cursor:crosshair;outline:3px solid var(--tape);outline-offset:-3px}
+.ph-tools{padding:10px;display:grid;gap:10px}
+.ph-help{display:flex;gap:10px;align-items:center}
+.ph-help svg{width:120px;flex:none;height:auto}
+.ph-help p{margin:0;font-size:.86rem}
+.ph-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ph-row label{font-size:.86rem;color:var(--muted);display:flex;align-items:center;gap:6px}
+.ph-row select{width:auto;padding:6px 8px}
+.ph-status{font-size:.84rem;margin:0;color:var(--muted)}
+.ph-status.bad{color:var(--err)}
+.addph{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.addph label.btn{display:inline-block}
+.addph input{position:absolute;width:1px;height:1px;opacity:0}
+
+.actionbar{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;z-index:5}
+.primary{font:600 1.1rem var(--tech);padding:12px 26px;border:0;border-radius:8px;background:var(--tape);color:#1E2830;cursor:pointer}
+.primary:hover{filter:brightness(.95)}
+.primary.secondary{background:var(--ink);color:var(--panel)}
+@media (max-width:480px){ .actionbar{gap:8px} .actionbar .primary{font-size:1rem;padding:12px 12px;flex:1 1 0;min-width:0} #pdf-msg{flex-basis:100%;text-align:center} }
+.primary:disabled{opacity:.5;cursor:wait}
+#pdf-msg{font-size:.85rem;color:var(--muted);max-width:420px}
+#pdf-msg.bad{color:var(--err)}
+#report{display:none}
+.sigs{display:grid;gap:14px}
+@media (min-width:640px){ .sigs{grid-template-columns:1fr 1fr} }
+.sig h3{margin:0 0 8px}
+.sig-pad{display:block;width:100%;height:170px;margin-top:8px;background:#FFFFFF;border:2px dashed var(--line);border-radius:8px;touch-action:none;cursor:crosshair}
+.sig-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px}
+.sig-date{font-size:.84rem;color:var(--muted)}
+.r-sigs{break-inside:avoid;page-break-inside:avoid;margin-top:10pt}
+.r-sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:10pt}
+.r-sig-t{font:600 10.5pt var(--tech)}
+.r-sig-n{font-size:9.5pt;margin:2pt 0}
+.r-sig-box{height:34mm;border:.6pt solid #9AA39A;display:flex;align-items:center;justify-content:center;background:#fff}
+.r-sig-box img{max-width:100%;max-height:32mm}
+.r-sig-d{font-size:8.5pt;color:#5E6A72;margin-top:2pt}
+#xr-ui{display:none;position:fixed;inset:0;z-index:50;font-family:var(--body);color:#fff}
+#xr-ui.on{display:block}
+#xr-draw{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#xr-ui .xr-top{position:absolute;top:0;left:0;right:0;background:rgba(30,40,48,.78);padding:calc(12px + env(safe-area-inset-top, 0px)) 16px 12px}
+#xr-ui .xr-title{font:600 18px var(--tech);color:#F2B705}
+#xr-msg{font-size:15px;white-space:pre-line;margin-top:2px}
+#xr-ui .xr-credit{font-size:11px;opacity:.7;margin-top:4px}
+#xr-ui .xr-link{background:none;border:0;color:#F2B705;font:600 14px var(--body);padding:6px 0 0;cursor:pointer}
+#xr-ui .xr-bottom{position:absolute;left:0;right:0;bottom:0;background:rgba(30,40,48,.82);padding:10px 12px calc(12px + env(safe-area-inset-bottom, 0px))}
+#xr-result{font:600 26px var(--tech);text-align:center;white-space:nowrap}
+#xr-ui .xr-main{display:block;width:100%;height:56px;margin-top:10px;border:0;border-radius:10px;background:#F2B705;color:#1E2830;font:600 18px var(--tech);white-space:nowrap}
+#xr-ui .xr-row{display:flex;gap:8px;margin-top:8px}
+#xr-ui .xr-row button{flex:1 1 0;min-width:0;height:48px;border:0;border-radius:10px;background:#465058;color:#fff;font:600 15px var(--tech);white-space:nowrap}
+#xr-ui .xr-row .xr-ok{background:#3B8B4B}
+#xr-ui .xr-row button:disabled{opacity:.4}
+#xr-ui .xr-tips{position:absolute;inset:0;background:rgba(30,40,48,.94);overflow:auto;padding:calc(40px + env(safe-area-inset-top, 0px)) 24px 32px}
+#xr-ui .xr-tips[hidden]{display:none}
+#xr-ui .xr-tips h3{font:600 22px var(--tech);color:#F2B705;margin:0 0 8px}
+#xr-ui .xr-tips li{margin:10px 0;font-size:15px;line-height:1.45}
+#xr-ui .xr-tips ul{padding-left:18px;margin:0}
+#xr-ui .xr-hide{display:flex;gap:8px;align-items:center;margin-top:16px;font-size:15px}
+
+@media print{
+  @page{size:A4 portrait;margin:12mm}
+  html,body{background:#fff;color:#1E2830}
+  .app,.actionbar,.tape{display:none!important}
+  #report{display:block;font:9.5pt/1.35 var(--body);color:#1E2830}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+.r-page{break-after:page;page-break-after:always}
+.r-page:last-child{break-after:auto;page-break-after:auto}
+.r-head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5pt solid #1E2830;padding-bottom:4pt;margin-bottom:4pt}
+.r-head h1{font:600 17pt/1 var(--tech);margin:0}
+.r-head .r-ref{text-align:right;font:600 10pt var(--tech)}
+.r-band{height:4pt;background:repeating-linear-gradient(135deg,#F2B705 0 8pt,#1E2830 8pt 16pt);margin-bottom:8pt}
+.r-grid{display:grid;grid-template-columns:1fr 1fr;gap:8pt;margin-bottom:8pt}
+#report h2{font:600 11pt var(--tech);margin:8pt 0 4pt}
+#report table{width:100%;border-collapse:collapse}
+#report th,#report td{border:.6pt solid #9AA39A;padding:3pt 5pt;text-align:left;vertical-align:top}
+#report th{width:42%;font-weight:600;background:#EDEFEA}
+#report table.recap{font-size:8pt;min-width:0}
+#report table.recap th{width:auto}
+#report table.recap td,#report table.recap th{white-space:normal;padding:3pt 4pt}
+#report table.recap td.n,#report table.recap th.n{white-space:nowrap;font-size:8pt}
+#report td.n{text-align:right;font-family:var(--tech);font-size:10.5pt}
+#report tr.tot th,#report tr.tot td{background:#1E2830;color:#fff}
+.r-3d{width:100%;max-height:118mm;object-fit:contain;display:block}
+.r-plan svg{width:100%;height:auto;max-height:115mm;border:.6pt solid #9AA39A}
+.r-coupes{display:grid;grid-template-columns:1fr 1fr;gap:8pt}
+.r-coupes figure{margin:0;min-width:0}
+.r-coupes figcaption{font:600 10pt var(--tech);margin-bottom:2pt}
+.r-coupes svg{width:100%;height:auto;max-height:85mm;border:.6pt solid #9AA39A}
+.r-photo{margin:0 0 8pt;break-inside:avoid;page-break-inside:avoid}
+.r-photo img{display:block;max-width:100%;max-height:112mm;margin:0 auto;border:.6pt solid #9AA39A}
+.r-photo figcaption{font-size:9pt;margin-top:3pt}
+.r-notes{font-size:8pt;color:#5E6A72;margin-top:8pt;padding-left:12pt}
+</style>
+</head>
+<body>
+<div class="tape" aria-hidden="true"></div>
+<div class="app">
+  <header class="top">
+    <h1>Relevé de fouille</h1>
+    <p>Cotes terrain → volumes, 3D, plan, coupes, photos et PDF.</p>
+    <div class="savebar">
+      <span id="save-status" role="status">Sauvegarde automatique active</span>
+      <button type="button" class="btn" id="new-releve">Nouveau relevé</button>
+    </div>
+  </header>
+
+  <!-- ========== ÉTAPE 1 : SAISIE ========== -->
+  <form id="step-input" class="narrow" novalidate>
+    <div class="fhead">
+      <h2 id="in-title">Fouille 1</h2>
+      <button type="button" class="btn" id="cancel" hidden>Annuler</button>
+    </div>
+    <div class="field"><label for="in-name">Repère de la fouille (optionnel)</label><input type="text" id="in-name" placeholder="ex. devant le n°12" autocomplete="off"></div>
+    <div class="seg" role="radiogroup" aria-label="Forme de la fouille">
+      <button type="button" role="radio" aria-checked="true" data-type="rect">Rectangulaire</button>
+      <button type="button" role="radio" aria-checked="false" data-type="L">En L</button>
+      <button type="button" role="radio" aria-checked="false" data-type="T">En T</button>
+    </div>
+
+    <div class="carts">
+      <div class="cart" id="c-a">
+        <label for="in-a" id="lb-a">Longueur</label><span class="sub" id="sub-a"></span>
+        <div class="cart-in"><input id="in-a" type="text" inputmode="decimal" placeholder="0,00" enterkeyhint="next" autocomplete="off"><span>m</span></div>
+        <button type="button" class="ar-btn" data-target="in-a" data-mode="distance" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="10" rx="1.5"/><path d="M6 7v4M10 7v3M14 7v4M18 7v3"/></svg>Mesurer</button>
+      </div>
+      <div class="cart" id="c-b">
+        <label for="in-b" id="lb-b">Largeur</label><span class="sub" id="sub-b"></span>
+        <div class="cart-in"><input id="in-b" type="text" inputmode="decimal" placeholder="0,00" enterkeyhint="next" autocomplete="off"><span>m</span></div>
+        <button type="button" class="ar-btn" data-target="in-b" data-mode="distance" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="10" rx="1.5"/><path d="M6 7v4M10 7v3M14 7v4M18 7v3"/></svg>Mesurer</button>
+      </div>
+      <div class="cart" id="c-lb" hidden>
+        <label for="in-lb">Longueur B</label><span class="sub" id="sub-lb">branche B</span>
+        <div class="cart-in"><input id="in-lb" type="text" inputmode="decimal" placeholder="0,00" enterkeyhint="next" autocomplete="off"><span>m</span></div>
+        <button type="button" class="ar-btn" data-target="in-lb" data-mode="distance" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="10" rx="1.5"/><path d="M6 7v4M10 7v3M14 7v4M18 7v3"/></svg>Mesurer</button>
+      </div>
+      <div class="cart" id="c-wb" hidden>
+        <label for="in-wb">Largeur B</label><span class="sub">branche B</span>
+        <div class="cart-in"><input id="in-wb" type="text" inputmode="decimal" placeholder="0,00" enterkeyhint="next" autocomplete="off"><span>m</span></div>
+        <button type="button" class="ar-btn" data-target="in-wb" data-mode="distance" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="10" rx="1.5"/><path d="M6 7v4M10 7v3M14 7v4M18 7v3"/></svg>Mesurer</button>
+      </div>
+      <div class="cart" id="c-p">
+        <label for="in-p" id="lb-p">Profondeur P</label><span class="sub" id="sub-p">totale, depuis la surface</span>
+        <div class="cart-in"><input id="in-p" type="text" inputmode="decimal" placeholder="0,00" enterkeyhint="next" autocomplete="off"><span>m</span></div>
+      </div>
+      <div class="cart" id="c-pb" hidden>
+        <label for="in-pb">Profondeur B</label><span class="sub">branche B, depuis la surface</span>
+        <div class="cart-in"><input id="in-pb" type="text" inputmode="decimal" placeholder="0,00" enterkeyhint="next" autocomplete="off"><span>m</span></div>
+      </div>
+      <div class="cart demo" id="c-e">
+        <label for="in-e">Démolition</label><span class="sub">grave ciment, comprise dans P</span>
+        <div class="cart-in"><input id="in-e" type="text" inputmode="decimal" placeholder="0" enterkeyhint="done" autocomplete="off"><span>cm</span></div>
+      </div>
+      <div class="cart span2" id="c-com">
+        <label for="in-com">Commentaire</label><span class="sub">optionnel, repris dans le PDF</span>
+        <textarea id="in-com" rows="3" placeholder="ex. réseaux rencontrés, nature du sol, contraintes, réfection prévue…"></textarea>
+      </div>
+    </div>
+    <p class="hint" id="ar-hint" hidden>« Mesurer » : longueurs et largeurs à la caméra (conseils affichés à l'ouverture de la caméra). La profondeur se saisit au clavier. Valeur approximative, à vérifier au mètre.</p>
+    <p class="hint" id="hint-T" hidden>Fouille en T : la branche B part du milieu de la branche A. Longueur B mesurée depuis le bord de A jusqu'au bout de B. Une profondeur par branche, démolition comprise.</p>
+    <p class="hint" id="hint-L" hidden>Longueurs A et B mesurées côté extérieur de l'angle, de bout à bout (angle compris). A et B se rejoignent à l'angle.</p>
+
+    <div id="input-errs" role="alert"></div>
+
+    <details class="panel">
+      <summary>Infos chantier (pour le PDF)</summary>
+      <div class="grid2">
+        <div class="field"><label for="affaire">N° d'affaire</label><input type="text" id="affaire" autocomplete="off"></div>
+        <div class="field"><label for="date">Date du relevé</label><input type="date" id="date"></div>
+        <div class="field span2"><label for="adresse">Adresse</label><input type="text" id="adresse" autocomplete="off"></div>
+        <div class="field"><label for="commune">Commune</label><input type="text" id="commune" autocomplete="off"></div>
+        <div class="field"><label for="entreprise">Entreprise</label><input type="text" id="entreprise" autocomplete="off"></div>
+        <div class="field span2"><label for="redacteur">Rédacteur</label><input type="text" id="redacteur" autocomplete="off"></div>
+        <div class="field span2"><label for="obs">Observations</label><textarea id="obs" rows="2"></textarea></div>
+      </div>
+    </details>
+  </form>
+
+  <!-- ========== ÉTAPE 2 : RÉSULTAT ========== -->
+  <div id="step-result" hidden>
+    <div class="fbar">
+      <div class="chips" id="chips" role="tablist" aria-label="Fouilles du relevé"></div>
+      <button type="button" class="btn on" id="add-f">+ Ajouter une fouille</button>
+    </div>
+    <section class="panel" id="recap" hidden style="margin-bottom:14px">
+      <h2>Récapitulatif du chantier</h2>
+      <div class="tscroll" id="recap-body"></div>
+    </section>
+    <div class="resbar">
+      <button type="button" class="btn" id="back">← Modifier les cotes</button>
+      <h2 id="res-title"></h2>
+      <button type="button" class="btn danger" id="del-f" hidden>Supprimer cette fouille</button>
+    </div>
+    <div class="layout">
+      <section class="panel full" aria-labelledby="h-v">
+        <h2 id="h-v">Volumes</h2>
+        <div id="results"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-3d">
+        <h2 id="h-3d">Vue 3D</h2>
+        <div class="viewer"><canvas id="cv" tabindex="0" aria-label="Vue 3D de la fouille. Glisser ou utiliser les flèches du clavier pour tourner."></canvas></div>
+        <div class="toolbar">
+          <button type="button" class="btn" data-view="iso">Vue 3/4</button>
+          <button type="button" class="btn" data-view="top">Dessus</button>
+          <button type="button" class="btn" data-view="front">Face</button>
+          <button type="button" class="btn" data-view="side">Côté</button>
+          <label class="vex">Exag. verticale
+            <select id="vex"><option value="1">×1</option><option value="2">×2</option><option value="3">×3</option><option value="5">×5</option></select>
+          </label>
+        </div>
+        <p class="hint">Glisser pour tourner. Les cotes affichent les valeurs réelles, l'exagération ne change que l'affichage.</p>
+        <div class="legend"><span><span class="sw" id="sw-demo"></span><span id="lg-demo">Démolition</span></span><span><span class="sw" style="background:var(--terre)"></span>Fouille</span></div>
+      </section>
+      <section class="panel" aria-labelledby="h-2d">
+        <h2 id="h-2d">Vues 2D</h2>
+        <h3>Vue de dessus</h3>
+        <div id="plan"></div>
+        <div id="coupes" class="coupes"></div>
+      </section>
+      <section class="panel full" aria-labelledby="h-ph">
+        <h2 id="h-ph">Photos</h2>
+        <div class="addph">
+          <label class="btn on" for="ph-cam" id="ph-camlbl">Prendre une photo</label>
+          <input type="file" id="ph-cam" accept="image/*" capture="environment">
+          <label class="btn" for="ph-input" id="ph-add">Depuis la galerie</label>
+          <input type="file" id="ph-input" accept="image/*" multiple>
+          <span class="hint" id="ph-count" style="margin:0">4 photos maximum.</span>
+        </div>
+        <div id="photos" class="photos"></div>
+      </section>
+      <section class="panel full" aria-labelledby="h-sig">
+        <h2 id="h-sig">Signatures</h2>
+        <p class="hint" style="margin:0 0 10px">Signer avec le doigt dans le cadre blanc. Les signatures valent pour tout le relevé et sont reprises à la fin du PDF.</p>
+        <div class="sigs">
+      <div class="sig">
+          <h3>Chargé d'affaires</h3>
+          <div class="field"><label for="sig-ca-name">Nom</label><input type="text" id="sig-ca-name" autocomplete="off"></div>
+          <canvas class="sig-pad" id="sig-ca-pad" aria-label="Zone de signature : Chargé d'affaires"></canvas>
+          <div class="sig-foot"><span class="sig-date" id="sig-ca-date">Non signé</span><button type="button" class="btn" data-sigclear="ca">Effacer</button></div>
+        </div>
+      <div class="sig">
+          <h3>Prestataire</h3>
+          <div class="field"><label for="sig-pr-name">Nom</label><input type="text" id="sig-pr-name" autocomplete="off"></div>
+          <canvas class="sig-pad" id="sig-pr-pad" aria-label="Zone de signature : Prestataire"></canvas>
+          <div class="sig-foot"><span class="sig-date" id="sig-pr-date">Non signé</span><button type="button" class="btn" data-sigclear="pr">Effacer</button></div>
+        </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="actionbar">
+  <button type="submit" form="step-input" class="primary" id="validate">Valider</button>
+  <button type="button" class="primary" id="pdf" hidden>Exporter en PDF</button>
+  <button type="button" class="primary secondary" id="mail" hidden>Envoyer par email</button>
+  <button type="button" class="primary" id="mail-ready" hidden>Envoyer le PDF prêt</button>
+  <span id="pdf-msg" role="status" hidden>Dans la fenêtre d'impression, choisir « Enregistrer en PDF ».</span>
+</div>
+
+<div id="report" aria-hidden="true"></div>
+
+<script>
+(function(){
+'use strict';
+var TECH = 'Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif';
+var BODY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+var DEMO_MAT = 'Grave ciment';
+var DEMO_COL = '#8F8C80';
+var VIEWS = {iso:[-35,30], top:[0,90], front:[0,8], side:[-90,8]};
+var MAXPH = 4, MAXPX = 1600;
+var state = {type:'rect', mode:'incl', az:-35, el:30, vex:1, step:'input'};
+var current = null;
+var fouilles = [], cur = -1, fSeq = 0;
+var FIELDS = ['in-name','in-a','in-b','in-lb','in-wb','in-p','in-pb','in-e','in-com'];
+function F(){ return fouilles[cur]; }
+function newFouille(prev){ return {id:++fSeq, name:'', type:'rect', mode:'incl', vals:{}, g:null, photos:[]}; }
+function doneList(){ return fouilles.filter(function(f){ return f.g; }); }
+function fNum(f){ return fouilles.indexOf(f) + 1; }
+function fComment(f){ return ((f && f.vals && f.vals['in-com']) || '').trim(); }
+function fLabel(f){ return 'Fouille ' + fNum(f) + (f.name ? ' – ' + f.name : ''); }
+var phSeq = 0;
+var $ = function(id){ return document.getElementById(id); };
+
+function num(id){
+  var t = $(id).value.trim().replace(/\s/g,'').replace(',', '.');
+  if(t === '') return NaN;
+  var v = Number(t);
+  return isFinite(v) ? v : NaN;
+}
+function blank(id){ return $(id).value.trim() === ''; }
+function fmt(v, d){
+  if(d === undefined) d = 2;
+  return isFinite(v) ? v.toLocaleString('fr-FR',{minimumFractionDigits:d, maximumFractionDigits:d}) : '–';
+}
+function fmtCm(m){ var mm = Math.round(m*1000); return fmt(mm/10, mm % 10 === 0 ? 0 : 1) + ' cm'; }
+function esc(s){
+  return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
+}
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function isDark(){ return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches; }
+
+function palette(print){
+  var demoCol = DEMO_COL;
+  if(print || !isDark()){
+    return {bg:'#FFFFFF', ink:'#1E2830', muted:'#5E6A72', ground:'#E9ECE6', groundLine:'#9AA39A',
+      demo:demoCol, terre:'#B98A55', terreTop:'#CFA673', labelBg:'rgba(255,255,255,0.92)', edge:'#1E2830'};
+  }
+  return {bg:'#20272C', ink:'#E6E9E4', muted:'#9AA5AC', ground:'#29313A', groundLine:'#56626A',
+    demo:demoCol, terre:'#B98A55', terreTop:'#CFA673', labelBg:'rgba(32,39,44,0.92)', edge:'#0E1215'};
+}
+function shade(hex, f){
+  var n = parseInt(hex.slice(1), 16);
+  return 'rgb(' + Math.min(255, Math.round(((n>>16)&255)*f)) + ',' + Math.min(255, Math.round(((n>>8)&255)*f)) + ',' + Math.min(255, Math.round((n&255)*f)) + ')';
+}
+function rgba(hex, a){
+  var n = parseInt(hex.slice(1), 16);
+  return 'rgba(' + ((n>>16)&255) + ',' + ((n>>8)&255) + ',' + (n&255) + ',' + a + ')';
+}
+
+/* ================= Calculs ================= */
+function compute(){
+  var t = state.type, errs = [], bad = [], g = {type:t};
+  function need(v, label, id){ if(!(v > 0)){ errs.push(label + ' : saisir une valeur supérieure à 0.'); bad.push(id); } }
+  var P = num('in-p');
+  if(t === 'rect'){
+    g.L = num('in-a'); g.w = num('in-b');
+    need(g.L, 'Longueur', 'c-a'); need(g.w, 'Largeur', 'c-b');
+  } else {
+    g.LA = num('in-a'); g.wA = num('in-b'); g.LB = num('in-lb'); g.wB = num('in-wb');
+    need(g.LA, 'Longueur A', 'c-a'); need(g.wA, 'Largeur A', 'c-b');
+    need(g.LB, 'Longueur B', 'c-lb'); need(g.wB, 'Largeur B', 'c-wb');
+    if(g.LA > 0 && g.wB > 0 && g.wB >= g.LA){ errs.push('Largeur B : doit être inférieure à la longueur A.'); bad.push('c-wb'); }
+    if(t === 'L' && g.LB > 0 && g.wA > 0 && g.wA >= g.LB){ errs.push('Largeur A : doit être inférieure à la longueur B.'); bad.push('c-b'); }
+    if(t === 'T'){ g.PB = num('in-pb'); need(g.PB, 'Profondeur B', 'c-pb'); }
+  }
+  var ecm = blank('in-e') ? 0 : num('in-e');
+  if(!(ecm >= 0)){ errs.push('Démolition : saisir une épaisseur en cm, ou laisser vide.'); bad.push('c-e'); ecm = 0; }
+  var demo = ecm > 0;
+  var incl = demo && state.mode === 'incl';
+  need(P, t === 'T' ? 'Profondeur A' : (incl ? 'Profondeur totale' : 'Profondeur'), 'c-p');
+  var e = ecm / 100;
+  if(incl && P > 0 && e >= P){ errs.push('Démolition : doit être inférieure à la profondeur' + (t === 'T' ? ' A.' : ' totale.')); bad.push('c-e'); }
+  if(t === 'T' && demo && g.PB > 0 && e >= g.PB){ errs.push('Démolition : doit être inférieure à la profondeur B.'); bad.push('c-e'); }
+  if(errs.length) return {errs:errs, bad:bad};
+
+  var poly, inner = [], dims, cuts, area, dTotal, dSplit, corners;
+  if(t === 'rect'){
+    poly = [[0,0],[g.L,0],[g.L,g.w],[0,g.w]];
+    area = g.L * g.w;
+    dims = [
+      {a:[0,0], b:[g.L,0], n:[0,-1], label:'Long. = ' + fmt(g.L) + ' m'},
+      {a:[g.L,0], b:[g.L,g.w], n:[1,0], label:'Larg. = ' + fmt(g.w) + ' m'}
+    ];
+    cuts = [{name:'A', title:'Coupe A-A', w:g.w, a:[g.L/2,0], b:[g.L/2,g.w]}];
+    dTotal = {c:[0,0], n:[-1,-1]}; dSplit = {c:[g.L,0], n:[1,-1]};
+    corners = [0,1,2,3];
+  } else if(t === 'T'){
+    // B au milieu de A ; longueur B depuis le bord de A
+    var x1 = (g.LA - g.wB)/2, x2 = x1 + g.wB, yT = g.wA + g.LB;
+    g.x1 = x1; g.x2 = x2;
+    poly = [[0,0],[g.LA,0],[g.LA,g.wA],[x2,g.wA],[x2,yT],[x1,yT],[x1,g.wA],[0,g.wA]];
+    area = g.LA*g.wA + g.wB*g.LB;
+    g.areaA = g.LA*g.wA; g.areaB = g.wB*g.LB;
+    dims = [
+      {a:[0,0], b:[g.LA,0], n:[0,-1], label:'A = ' + fmt(g.LA) + ' m'},
+      {a:[g.LA,0], b:[g.LA,g.wA], n:[1,0], label:'Larg. A = ' + fmt(g.wA) + ' m'},
+      {a:[x2,g.wA], b:[x2,yT], n:[1,0], label:'B = ' + fmt(g.LB) + ' m'},
+      {a:[x2,yT], b:[x1,yT], n:[0,1], label:'Larg. B = ' + fmt(g.wB) + ' m'}
+    ];
+    cuts = [
+      {name:'A', title:'Coupe A-A (branche A)', w:g.wA, P:P, a:[x1/2,0], b:[x1/2,g.wA]},
+      {name:'B', title:'Coupe B-B (branche B)', w:g.wB, P:g.PB, a:[x1,g.wA + g.LB/2], b:[x2,g.wA + g.LB/2]}
+    ];
+    g.boxes = [{x0:0, x1:g.LA, y0:0, y1:g.wA, P:P}, {x0:x1, x1:x2, y0:g.wA, y1:yT, P:g.PB}];
+    g.depthDims = [
+      {c:[0,0], n:[-1,-1], P:P, label:'P A = ' + fmt(P) + ' m'},
+      {c:[x2,yT], n:[1,1], P:g.PB, label:'P B = ' + fmt(g.PB) + ' m'}
+    ];
+    dTotal = {c:[0,0], n:[-1,-1]}; dSplit = {c:[g.LA,0], n:[1,-1]};
+    corners = [0,1,2,3,4,5,6,7];
+  } else {
+    poly = [[0,0],[g.LA,0],[g.LA,g.wA],[g.wB,g.wA],[g.wB,g.LB],[0,g.LB]];
+    inner = [2,3];
+    area = g.LA*g.wA + g.wB*(g.LB - g.wA);
+    dims = [
+      {a:[0,0], b:[g.LA,0], n:[0,-1], label:'A = ' + fmt(g.LA) + ' m'},
+      {a:[g.LA,0], b:[g.LA,g.wA], n:[1,0], label:'Larg. A = ' + fmt(g.wA) + ' m'},
+      {a:[0,0], b:[0,g.LB], n:[-1,0], label:'B = ' + fmt(g.LB) + ' m'},
+      {a:[0,g.LB], b:[g.wB,g.LB], n:[0,1], label:'Larg. B = ' + fmt(g.wB) + ' m'}
+    ];
+    cuts = [
+      {name:'A', title:'Coupe A-A (branche A)', w:g.wA, a:[(g.wB+g.LA)/2,0], b:[(g.wB+g.LA)/2,g.wA]},
+      {name:'B', title:'Coupe B-B (branche B)', w:g.wB, a:[0,(g.wA+g.LB)/2], b:[g.wB,(g.wA+g.LB)/2]}
+    ];
+    dTotal = {c:[0,0], n:[-1,-1]}; dSplit = {c:[g.LA,0], n:[1,-1]};
+    corners = [0,1,2,3,4,5];
+  }
+  var Ptot = incl ? P : P + e;
+  g.poly = poly; g.inner = inner; g.dims = dims; g.cuts = cuts; g.dTotal = dTotal; g.dSplit = dSplit; g.corners = corners;
+  g.P = P; g.e = e; g.Ptot = Ptot; g.Pf = Ptot - e; g.area = area;
+  g.Vd = area * e; g.Vf = area * g.Pf; g.Vt = area * Ptot;
+  if(t === 'T'){
+    g.PA = P;
+    g.Ptot = Math.max(P, g.PB);
+    g.VtA = g.areaA * P; g.VtB = g.areaB * g.PB;
+    g.Vt = g.VtA + g.VtB;
+    g.Vf = g.Vt - g.Vd;
+    g.Pf = null;
+  }
+  g.demo = demo; g.mode = state.mode;
+  return g;
+}
+
+function tRows(g){
+  // lignes Géométrie d'une fouille en T : [libellé, valeur, numérique]
+  var r = [['Forme', 'En T (B au milieu de A, longueur B depuis le bord de A)', 0],
+    ['Branche A : longueur / largeur', fmt(g.LA) + ' m / ' + fmt(g.wA) + ' m', 1],
+    ['Branche B : longueur / largeur', fmt(g.LB) + ' m / ' + fmt(g.wB) + ' m', 1],
+    ['Profondeur A / B', fmt(g.PA) + ' m / ' + fmt(g.PB) + ' m', 1]];
+  if(g.e > 0){
+    r.push(['Démolition', DEMO_MAT + ', ' + fmtCm(g.e), 1], ['Épaisseur de démolition', 'comprise dans chaque profondeur', 0]);
+  } else r.push(['Démolition', 'Aucune', 0]);
+  return r;
+}
+function tVolRows(g){
+  return [['Volume branche A', fmt(g.VtA, 3) + ' m³'], ['Volume branche B', fmt(g.VtB, 3) + ' m³']];
+}
+function depthText(g){
+  return g.type === 'T' ? 'P A ' + fmt(g.PA) + ' / P B ' + fmt(g.PB) + ' m' : 'P ' + fmt(g.Ptot) + ' m';
+}
+function depthShort(g){
+  return g.type === 'T' ? fmt(g.PA) + ' / ' + fmt(g.PB) + ' m' : fmt(g.Ptot) + ' m';
+}
+function dimsText(g){
+  if(g.type === 'T') return 'en T, A ' + fmt(g.LA) + ' × ' + fmt(g.wA) + ' / B ' + fmt(g.LB) + ' × ' + fmt(g.wB) + ' m';
+  return g.type === 'rect'
+    ? fmt(g.L) + ' × ' + fmt(g.w) + ' m'
+    : 'en L, A ' + fmt(g.LA) + ' × ' + fmt(g.wA) + ' / B ' + fmt(g.LB) + ' × ' + fmt(g.wB) + ' m';
+}
+function recapHTML(list, esc2){
+  var t = {area:0, Vd:0, Vf:0, Vt:0};
+  var h = '<table class="recap"><thead><tr><th>Fouille</th><th>Dimensions</th><th class="n">P totale</th><th class="n">Démol.</th>' +
+    '<th class="n">Emprise</th><th class="n">V démol.</th><th class="n">V fouille</th><th class="n">V total</th></tr></thead><tbody>';
+  list.forEach(function(f){
+    var g = f.g;
+    t.area += g.area; t.Vd += g.Vd; t.Vf += g.Vf; t.Vt += g.Vt;
+    var cm = fComment(f);
+    h += '<tr><td>' + esc(fLabel(f)) + (cm ? '<br><small style="color:var(--muted,#5E6A72)">' + esc(cm.length > 80 ? cm.slice(0, 80) + '…' : cm) + '</small>' : '') + '</td><td>' + dimsText(g) + '</td><td class="n">' + fmt(g.Ptot) + ' m</td>' +
+      '<td class="n">' + (g.e > 0 ? fmtCm(g.e) : '—') + '</td><td class="n">' + fmt(g.area) + ' m²</td>' +
+      '<td class="n">' + fmt(g.Vd, 3) + ' m³</td><td class="n">' + fmt(g.Vf, 3) + ' m³</td><td class="n">' + fmt(g.Vt, 3) + ' m³</td></tr>';
+  });
+  h += '<tr class="tot"><td>Total (' + list.length + ' fouilles)</td><td></td><td></td><td></td><td class="n">' + fmt(t.area) + ' m²</td>' +
+    '<td class="n">' + fmt(t.Vd, 3) + ' m³</td><td class="n">' + fmt(t.Vf, 3) + ' m³</td><td class="n">' + fmt(t.Vt, 3) + ' m³</td></tr>';
+  return h + '</tbody></table>';
+}
+function renderResults(g){
+  var cells = [['Emprise', fmt(g.area), 'm²'], g.type === 'T' ? ['Profondeurs A / B', fmt(g.PA) + ' / ' + fmt(g.PB), 'm'] : ['Profondeur totale', fmt(g.Ptot), 'm']];
+  if(g.e > 0){ cells.push(['Volume démolition', fmt(g.Vd, 3), 'm³']); cells.push(['Volume fouille', fmt(g.Vf, 3), 'm³']); }
+  var html = '<dl class="res">' + cells.map(function(c){
+    return '<div><dt>' + c[0] + '</dt><dd>' + c[1] + ' <small>' + c[2] + '</small></dd></div>';
+  }).join('');
+  html += '<div class="total"><dt>Volume total en place</dt><dd>' + fmt(g.Vt, 3) + ' <small>m³</small></dd></div></dl>';
+  html += '<p class="hint">Volumes en place (non foisonnés), calculés depuis les cotes saisies.</p>';
+  var com = fComment(F());
+  if(com) html += '<div class="comment"><h3>Commentaire</h3><p>' + esc(com).replace(/\n/g, '<br>') + '</p></div>';
+  $('results').innerHTML = html;
+  $('res-title').textContent = fLabel(F()) + ' : ' + dimsText(g) + ', ' + depthText(g);
+}
+
+/* ================= Rendu 3D ================= */
+function arrowHead(ctx, from, to, k){
+  var dx = to[0]-from[0], dy = to[1]-from[1], l = Math.hypot(dx,dy) || 1, ux = dx/l, uy = dy/l, a = 8*k, b = 3*k;
+  ctx.beginPath(); ctx.moveTo(to[0], to[1]);
+  ctx.lineTo(to[0]-ux*a-uy*b, to[1]-uy*a+ux*b);
+  ctx.lineTo(to[0]-ux*a+uy*b, to[1]-uy*a-ux*b);
+  ctx.closePath(); ctx.fill();
+}
+function tickMark(ctx, p, t, k){
+  var s = 4*k, dx = (t[0]+t[1])*0.7071, dy = (t[1]-t[0])*0.7071;
+  ctx.beginPath(); ctx.moveTo(p[0]-dx*s, p[1]-dy*s); ctx.lineTo(p[0]+dx*s, p[1]+dy*s); ctx.stroke();
+}
+function labelBox(ctx, label, x, y, align, c, k){
+  var tw = ctx.measureText(label).width, th = 16*k, pad = 4*k;
+  var bx = align === 'left' ? x - pad : (align === 'right' ? x - tw - pad : x - tw/2 - pad);
+  var CW = ctx.canvas.width, CH = ctx.canvas.height, bw2 = tw + 2*pad;
+  if(bx < 2*k){ x += 2*k - bx; bx = 2*k; }
+  if(bx + bw2 > CW - 2*k){ var dd = bx + bw2 - (CW - 2*k); x -= dd; bx -= dd; }
+  y = clamp(y, th/2 + 2*k, CH - th/2 - 2*k);
+  ctx.fillStyle = c.labelBg; ctx.fillRect(bx, y - th/2, bw2, th);
+  ctx.fillStyle = c.ink; ctx.textAlign = align; ctx.textBaseline = 'middle';
+  ctx.fillText(label, x, y + 0.5*k);
+}
+function dimCanvas(ctx, A, B, d, off, label, c, k, mode, ly){
+  var A2 = [A[0]+d[0]*off, A[1]+d[1]*off], B2 = [B[0]+d[0]*off, B[1]+d[1]*off];
+  ctx.save();
+  ctx.strokeStyle = c.ink; ctx.fillStyle = c.ink; ctx.lineWidth = 0.9*k;
+  ctx.globalAlpha = 0.5; ctx.beginPath();
+  ctx.moveTo(A[0]+d[0]*3*k, A[1]+d[1]*3*k); ctx.lineTo(A2[0]+d[0]*5*k, A2[1]+d[1]*5*k);
+  ctx.moveTo(B[0]+d[0]*3*k, B[1]+d[1]*3*k); ctx.lineTo(B2[0]+d[0]*5*k, B2[1]+d[1]*5*k);
+  ctx.stroke(); ctx.globalAlpha = 1;
+  ctx.beginPath(); ctx.moveTo(A2[0], A2[1]); ctx.lineTo(B2[0], B2[1]); ctx.stroke();
+  var len = Math.hypot(B2[0]-A2[0], B2[1]-A2[1]);
+  if(len > 20*k){ arrowHead(ctx, B2, A2, k); arrowHead(ctx, A2, B2, k); }
+  else { var t = len > 0 ? [(B2[0]-A2[0])/len, (B2[1]-A2[1])/len] : [0,1]; tickMark(ctx, A2, t, k); tickMark(ctx, B2, t, k); }
+  var tw = ctx.measureText(label).width, th = 16*k, x, y, align;
+  if(mode === 'side'){ align = d[0] > 0 ? 'left' : 'right'; x = A2[0] + d[0]*9*k; y = (ly === undefined) ? (A2[1]+B2[1])/2 : ly; }
+  else if(mode === 'below'){ align = d[0] > 0 ? 'right' : 'left'; x = B2[0] + d[0]*6*k; y = ly; }
+  else {
+    var mx = (A2[0]+B2[0])/2, my = (A2[1]+B2[1])/2;
+    align = 'center';
+    if(len > tw + 18*k){ x = mx; y = my; }
+    else {
+      var t2 = len > 0 ? [(B2[0]-A2[0])/len, (B2[1]-A2[1])/len] : [1,0];
+      var sh = Math.abs(t2[0])*(tw/2 + 4*k) + Math.abs(t2[1])*(th/2) + 8*k;
+      x = B2[0] + t2[0]*sh; y = B2[1] + t2[1]*sh;
+    }
+  }
+  labelBox(ctx, label, x, y, align, c, k);
+  ctx.restore();
+}
+
+function render3D(ctx, W, H, g, o){
+  var c = palette(o.print), k = o.k;
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = c.bg; ctx.fillRect(0,0,W,H);
+  if(!g || g.errs) return;
+  var az = o.az*Math.PI/180, el = o.el*Math.PI/180;
+  var ca = Math.cos(az), sa = Math.sin(az), ce = Math.cos(el), se = Math.sin(el);
+  var poly = g.poly, n = poly.length;
+  var bw = Math.max.apply(null, poly.map(function(p){ return p[0]; }));
+  var bh = Math.max.apply(null, poly.map(function(p){ return p[1]; }));
+  var maxD = Math.max(bw, bh), cx0 = bw/2, cy0 = bh/2;
+  var zb = -g.Ptot*o.vex, ze = -g.e*o.vex;
+  var boxes = g.boxes || null;
+  var gm = Math.max(0.4, maxD*0.12);
+  var ground = [[-gm,-gm],[bw+gm,-gm],[bw+gm,bh+gm],[-gm,bh+gm]];
+  function pr(x, y, z){
+    var X = x-cx0, Y = y-cy0, x1 = X*ca - Y*sa, y1 = X*sa + Y*ca;
+    return [x1, y1*se + z*ce];
+  }
+  var pts = [];
+  ground.forEach(function(p){ pts.push(pr(p[0],p[1],0)); });
+  poly.forEach(function(p){ pts.push(pr(p[0],p[1],0)); pts.push(pr(p[0],p[1],zb)); });
+  var umin = Infinity, umax = -Infinity, vmin = Infinity, vmax = -Infinity;
+  pts.forEach(function(p){ umin = Math.min(umin,p[0]); umax = Math.max(umax,p[0]); vmin = Math.min(vmin,p[1]); vmax = Math.max(vmax,p[1]); });
+
+  var narrow = W/k < 560;
+  var fs = narrow ? 11.5 : 12.5;
+  ctx.font = '600 ' + Math.round(fs*k) + 'px ' + TECH;
+  var depthLabels = g.type === 'T'
+    ? g.depthDims.map(function(d){ return d.label; })
+    : g.e > 0
+    ? ['P totale = ' + fmt(g.Ptot) + ' m', 'Démolition ' + fmtCm(g.e), 'Fouille ' + fmt(g.Pf) + ' m']
+    : ['P = ' + fmt(g.Ptot) + ' m'];
+  var maxLw = Math.max.apply(null, depthLabels.map(function(t){ return ctx.measureText(t).width; }));
+  var mgX = narrow ? 40*k : Math.max(64*k, maxLw + 40*k);
+  var mgT = 44*k, mgB = narrow ? (g.e > 0 ? 64*k : 46*k) : 44*k;
+  var s = Math.min((W-2*mgX)/Math.max(umax-umin,1e-6), (H-mgT-mgB)/Math.max(vmax-vmin,1e-6));
+  var ox = W/2 - (umin+umax)/2*s, oy = mgT + (H-mgT-mgB)/2 + (vmin+vmax)/2*s;
+  function S(x, y, z){ var r = pr(x,y,z); return [ox + r[0]*s, oy - r[1]*s]; }
+  function face(arr, fill, lw){
+    ctx.beginPath();
+    arr.forEach(function(q,i){ if(i) ctx.lineTo(q[0],q[1]); else ctx.moveTo(q[0],q[1]); });
+    ctx.closePath();
+    ctx.fillStyle = fill; ctx.fill();
+    ctx.strokeStyle = c.edge; ctx.lineWidth = (lw||1)*k; ctx.lineJoin = 'round'; ctx.stroke();
+  }
+  ctx.beginPath();
+  ground.forEach(function(p,i){ var q = S(p[0],p[1],0); if(i) ctx.lineTo(q[0],q[1]); else ctx.moveTo(q[0],q[1]); });
+  ctx.closePath();
+  ctx.fillStyle = c.ground; ctx.fill();
+  ctx.setLineDash([6*k,4*k]); ctx.strokeStyle = c.groundLine; ctx.lineWidth = k; ctx.stroke(); ctx.setLineDash([]);
+
+  if(boxes){
+    // Fouille en T : deux blocs (profondeurs différentes) séparés par le plan y = largeur A.
+    // Le bloc le plus éloigné de l'observateur est dessiné en premier.
+    var order = ca < 0 ? boxes.slice() : boxes.slice().reverse();
+    order.forEach(function(bx){
+      var zbb = -bx.P*o.vex;
+      var q = [[bx.x0,bx.y0],[bx.x1,bx.y0],[bx.x1,bx.y1],[bx.x0,bx.y1]];
+      for(var j = 0; j < 4; j++){
+        var p = q[j], r = q[(j+1)%4];
+        var dx = r[0]-p[0], dy = r[1]-p[1], len = Math.hypot(dx,dy);
+        var nx = dy/len, ny = -dx/len;
+        var n1x = nx*ca - ny*sa, n1y = nx*sa + ny*ca;
+        if(-n1y*ce <= 1e-6) continue;
+        var fsh = 0.8 + 0.2*n1x;
+        if(g.e > 0) face([S(p[0],p[1],0), S(r[0],r[1],0), S(r[0],r[1],ze), S(p[0],p[1],ze)], shade(c.demo, fsh));
+        face([S(p[0],p[1],ze), S(r[0],r[1],ze), S(r[0],r[1],zbb), S(p[0],p[1],zbb)], shade(c.terre, fsh));
+      }
+      face(q.map(function(p){ return S(p[0],p[1],0); }), g.e > 0 ? shade(c.demo, 1.12) : c.terreTop, 1.4);
+    });
+    ctx.save();
+    ctx.globalAlpha = 0.35; ctx.setLineDash([4*k,4*k]); ctx.strokeStyle = c.ink; ctx.lineWidth = k;
+    boxes.forEach(function(bx){
+      var zbb = -bx.P*o.vex;
+      ctx.beginPath();
+      [[bx.x0,bx.y0],[bx.x1,bx.y0],[bx.x1,bx.y1],[bx.x0,bx.y1]].forEach(function(p,i){ var q = S(p[0],p[1],zbb); if(i) ctx.lineTo(q[0],q[1]); else ctx.moveTo(q[0],q[1]); });
+      ctx.closePath(); ctx.stroke();
+    });
+    ctx.restore();
+  }
+  var walls = [];
+  for(var i = 0; i < n && !boxes; i++){
+    var p = poly[i], q = poly[(i+1)%n];
+    var dx = q[0]-p[0], dy = q[1]-p[1], len = Math.hypot(dx,dy);
+    var nx = dy/len, ny = -dx/len;
+    var n1x = nx*ca - ny*sa, n1y = nx*sa + ny*ca;
+    if(-n1y*ce <= 1e-6) continue;
+    walls.push({p:p, q:q, inner: g.inner.indexOf(i) >= 0 ? 1 : 0, f: 0.8 + 0.2*n1x});
+  }
+  walls.sort(function(a,b){ return b.inner - a.inner; });
+  walls.forEach(function(w){
+    var p = w.p, q = w.q;
+    if(g.e > 0) face([S(p[0],p[1],0), S(q[0],q[1],0), S(q[0],q[1],ze), S(p[0],p[1],ze)], shade(c.demo, w.f));
+    face([S(p[0],p[1],ze), S(q[0],q[1],ze), S(q[0],q[1],zb), S(p[0],p[1],zb)], shade(c.terre, w.f));
+  });
+  if(!boxes) face(poly.map(function(p){ return S(p[0],p[1],0); }), g.e > 0 ? shade(c.demo, 1.12) : c.terreTop, 1.4);
+
+  if(!boxes){
+  ctx.save();
+  ctx.globalAlpha = 0.35; ctx.setLineDash([4*k,4*k]); ctx.strokeStyle = c.ink; ctx.lineWidth = k;
+  ctx.beginPath();
+  poly.forEach(function(p,i){ var q = S(p[0],p[1],zb); if(i) ctx.lineTo(q[0],q[1]); else ctx.moveTo(q[0],q[1]); });
+  ctx.closePath(); ctx.stroke();
+  ctx.restore();
+  }
+
+  ctx.font = '600 ' + Math.round(fs*k) + 'px ' + TECH;
+  var unit = maxD*0.2, off = 26*k;
+  g.dims.forEach(function(d){
+    var A = S(d.a[0],d.a[1],0), B = S(d.b[0],d.b[1],0);
+    var tx = B[0]-A[0], ty = B[1]-A[1], tl = Math.hypot(tx,ty);
+    if(tl < 8*k) return;
+    tx /= tl; ty /= tl;
+    var mx = (d.a[0]+d.b[0])/2, my = (d.a[1]+d.b[1])/2;
+    var M = S(mx,my,0), M2 = S(mx+d.n[0]*unit, my+d.n[1]*unit, 0);
+    var dv = [M2[0]-M[0], M2[1]-M[1]], dl = Math.hypot(dv[0],dv[1]), dir;
+    if(dl < 0.35*unit*s || Math.abs(tx*dv[1]/dl - ty*dv[0]/dl) < 0.35){
+      dir = [-ty, tx];
+      var Cc = S(cx0, cy0, zb/2);
+      if(dir[0]*(M[0]-Cc[0]) + dir[1]*(M[1]-Cc[1]) < 0) dir = [ty, -tx];
+    } else dir = [dv[0]/dl, dv[1]/dl];
+    dimCanvas(ctx, A, B, dir, off, d.label, c, k, 'along');
+  });
+
+  function depthDim(spec, segs){
+    if(ce < 0.02) return;
+    var cc = spec.c;
+    var P0 = S(cc[0],cc[1],0), P1 = S(cc[0]+spec.n[0]*unit, cc[1]+spec.n[1]*unit, 0);
+    var dir = [(P1[0]-P0[0]) >= 0 ? 1 : -1, 0];
+    var items = segs.map(function(sg){
+      var A = S(cc[0],cc[1],sg.z1), B = S(cc[0],cc[1],sg.z2);
+      return {A:A, B:B, label:sg.label, ly:(A[1]+B[1])/2};
+    });
+    if(narrow){
+      var base = Math.max.apply(null, items.map(function(it){ return Math.max(it.A[1], it.B[1]); }));
+      items.forEach(function(it, j){ it.ly = base + (14 + j*18)*k; });
+    } else {
+      for(var j = items.length-2; j >= 0; j--){
+        if(items[j+1].ly - items[j].ly < 18*k) items[j].ly = items[j+1].ly - 18*k;
+      }
+    }
+    items.forEach(function(it){ dimCanvas(ctx, it.A, it.B, dir, 18*k, it.label, c, k, narrow ? 'below' : 'side', it.ly); });
+  }
+  if(g.depthDims){
+    g.depthDims.forEach(function(d){ depthDim(d, [{z1:0, z2:-d.P*o.vex, label:d.label}]); });
+  } else if(g.e > 0){
+    depthDim(g.dTotal, [{z1:0, z2:zb, label:depthLabels[0]}]);
+    depthDim(g.dSplit, [{z1:0, z2:ze, label:depthLabels[1]}, {z1:ze, z2:zb, label:depthLabels[2]}]);
+  } else {
+    depthDim(g.dTotal, [{z1:0, z2:zb, label:depthLabels[0]}]);
+  }
+  if(o.vex !== 1){
+    ctx.fillStyle = c.muted; ctx.font = Math.round(11.5*k) + 'px ' + BODY;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText('Exagération verticale ×' + o.vex + ' (affichage)', 10*k, H - 8*k);
+  }
+}
+
+var cv = $('cv');
+function draw3D(){
+  if(state.step !== 'result') return;
+  var rect = cv.getBoundingClientRect();
+  if(!rect.width) return;
+  var dpr = window.devicePixelRatio || 1;
+  var W = Math.round(rect.width*dpr), H = Math.round(rect.height*dpr);
+  if(cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; }
+  render3D(cv.getContext('2d'), W, H, current, {az:state.az, el:state.el, vex:state.vex, k:dpr, print:false});
+}
+
+/* ================= Vues 2D (SVG) ================= */
+function svgDefs(pfx, c){
+  return '<defs>' +
+    '<marker id="' + pfx + '-ar" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
+      '<path d="M0 1.5 L10 5 L0 8.5 z" fill="' + c.ink + '"/></marker>' +
+    '<pattern id="' + pfx + '-hd" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+      '<rect width="7" height="7" fill="' + c.demo + '"/><line x1="0" y1="0" x2="0" y2="7" stroke="#FFFFFF" stroke-opacity=".35" stroke-width="2"/></pattern>' +
+    '<pattern id="' + pfx + '-ht" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">' +
+      '<line x1="0" y1="0" x2="0" y2="9" stroke="' + c.groundLine + '" stroke-width="1"/></pattern>' +
+  '</defs>';
+}
+function svgDim(A, B, d, off, label, c, pfx, ly, opts){
+  var A2 = [A[0]+d[0]*off, A[1]+d[1]*off], B2 = [B[0]+d[0]*off, B[1]+d[1]*off];
+  var len = Math.hypot(B2[0]-A2[0], B2[1]-A2[1]);
+  var o = '<g stroke="' + c.ink + '" stroke-width="0.9" fill="none">';
+  o += '<line x1="' + (A[0]+d[0]*3) + '" y1="' + (A[1]+d[1]*3) + '" x2="' + (A2[0]+d[0]*5) + '" y2="' + (A2[1]+d[1]*5) + '" stroke-opacity=".5"/>';
+  o += '<line x1="' + (B[0]+d[0]*3) + '" y1="' + (B[1]+d[1]*3) + '" x2="' + (B2[0]+d[0]*5) + '" y2="' + (B2[1]+d[1]*5) + '" stroke-opacity=".5"/>';
+  if(len > 18){
+    o += '<line x1="' + A2[0] + '" y1="' + A2[1] + '" x2="' + B2[0] + '" y2="' + B2[1] + '" marker-start="url(#' + pfx + '-ar)" marker-end="url(#' + pfx + '-ar)"/>';
+  } else {
+    o += '<line x1="' + A2[0] + '" y1="' + A2[1] + '" x2="' + B2[0] + '" y2="' + B2[1] + '"/>';
+    var t = len > 0 ? [(B2[0]-A2[0])/len, (B2[1]-A2[1])/len] : [0,1];
+    var tx = (t[0]+t[1])*0.7071*4, ty = (t[1]-t[0])*0.7071*4;
+    [A2, B2].forEach(function(p){ o += '<line x1="' + (p[0]-tx) + '" y1="' + (p[1]-ty) + '" x2="' + (p[0]+tx) + '" y2="' + (p[1]+ty) + '"/>'; });
+  }
+  o += '</g>';
+  var mx = (A2[0]+B2[0])/2, my = (A2[1]+B2[1])/2, x, y, anchor;
+  var twEst = label.length*7.4;
+  var txt = ' fill="' + c.ink + '" stroke="' + c.bg + '" stroke-width="4" paint-order="stroke" font-weight="600">' + esc(label) + '</text>';
+  if(Math.abs(d[0]) > Math.abs(d[1])){
+    if(opts && opts.rotate && len > twEst + 10){
+      x = d[0] < 0 ? A2[0] - 6 : A2[0] + 16; y = my;
+      return o + '<text x="' + x + '" y="' + y + '" text-anchor="middle" transform="rotate(-90 ' + x + ' ' + y + ')"' + txt;
+    }
+    if(opts && opts.rotate){
+      var up = B2[1] < A2[1] ? B2 : A2;
+      return o + '<text x="' + up[0] + '" y="' + (up[1] - 10) + '" text-anchor="middle"' + txt;
+    }
+    anchor = d[0] > 0 ? 'start' : 'end'; x = mx + d[0]*8; y = (ly === undefined ? my : ly) + 4.5;
+  } else {
+    anchor = 'middle'; x = mx; y = d[1] < 0 ? my - 7 : my + 16;
+  }
+  return o + '<text x="' + x + '" y="' + y + '" text-anchor="' + anchor + '"' + txt;
+}
+function niceLen(maxLen){
+  var steps = [0.1,0.2,0.5,1,2,5,10,20,50,100], best = steps[0];
+  steps.forEach(function(v){ if(v <= maxLen) best = v; });
+  return best;
+}
+function planSVG(g, c, pfx, W){
+  W = W || 640;
+  var nar = W < 500;
+  var bw = Math.max.apply(null, g.poly.map(function(p){ return p[0]; }));
+  var bh = Math.max.apply(null, g.poly.map(function(p){ return p[1]; }));
+  var m = nar ? 78 : 100, maxH = nar ? 380 : 460;
+  var s = Math.min((W-2*m)/bw, (maxH-2*m)/bh);
+  var H = Math.max(bh*s + 2*m, 210);
+  var ox = (W - bw*s)/2, oy = (H + bh*s)/2;
+  function T(x, y){ return [ox + x*s, oy - y*s]; }
+  var o = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Vue de dessus de la fouille" font-family=\'' + TECH + '\' font-size="' + (nar ? 12 : 13) + '">';
+  o += svgDefs(pfx, c);
+  o += '<rect width="' + W + '" height="' + H + '" fill="' + c.bg + '"/>';
+  var pts = g.poly.map(function(p){ var q = T(p[0],p[1]); return q[0].toFixed(2) + ',' + q[1].toFixed(2); }).join(' ');
+  o += '<polygon points="' + pts + '" fill="' + (g.e > 0 ? 'url(#' + pfx + '-hd)' : c.terreTop) + '" stroke="' + c.ink + '" stroke-width="1.6" stroke-linejoin="round"/>';
+  g.cuts.forEach(function(ct){
+    var A = T(ct.a[0],ct.a[1]), B = T(ct.b[0],ct.b[1]);
+    var dx = B[0]-A[0], dy = B[1]-A[1], l = Math.hypot(dx,dy) || 1; dx /= l; dy /= l;
+    var A1 = [A[0]-dx*16, A[1]-dy*16], B1 = [B[0]+dx*16, B[1]+dy*16];
+    o += '<line x1="' + A1[0] + '" y1="' + A1[1] + '" x2="' + B1[0] + '" y2="' + B1[1] + '" stroke="' + c.ink + '" stroke-width="1.2" stroke-dasharray="10 3 2 3"/>';
+    o += '<text x="' + (A1[0]-dx*10) + '" y="' + (A1[1]-dy*10+4.5) + '" text-anchor="middle" font-weight="700" fill="' + c.ink + '">' + ct.name + '</text>';
+    o += '<text x="' + (B1[0]+dx*10) + '" y="' + (B1[1]+dy*10+4.5) + '" text-anchor="middle" font-weight="700" fill="' + c.ink + '">' + ct.name + '</text>';
+  });
+  g.dims.forEach(function(d){
+    o += svgDim(T(d.a[0],d.a[1]), T(d.b[0],d.b[1]), [d.n[0], -d.n[1]], 34, d.label, c, pfx, undefined, {rotate:true});
+  });
+  var sl = niceLen(W*0.2/s), bx = W - 18 - sl*s, by = H - 16;
+  o += '<g stroke="' + c.ink + '" stroke-width="1.2"><line x1="' + bx + '" y1="' + by + '" x2="' + (bx+sl*s) + '" y2="' + by + '"/>' +
+       '<line x1="' + bx + '" y1="' + (by-4) + '" x2="' + bx + '" y2="' + (by+4) + '"/><line x1="' + (bx+sl*s) + '" y1="' + (by-4) + '" x2="' + (bx+sl*s) + '" y2="' + (by+4) + '"/></g>';
+  o += '<text x="' + (bx+sl*s/2) + '" y="' + (by-7) + '" text-anchor="middle" font-size="11" fill="' + c.muted + '">' + fmt(sl, sl < 1 ? 1 : 0) + ' m</text>';
+  return o + '</svg>';
+}
+function coupeSVG(g, ct, c, pfx, W){
+  W = W || 520;
+  var nar = W < 500;
+  var w = ct.w, D = ct.P || g.Ptot, e = g.e;
+  var ext = Math.max(0.25, w*0.6);
+  var mL = nar ? 118 : 160, mR = mL, mT = 48, mB = 26;
+  var s = Math.min((W-mL-mR)/(w+2*ext), 300/D);
+  var H = mT + D*s + mB;
+  var x0 = mL + ((W-mL-mR) - (w+2*ext)*s)/2 + ext*s, y0 = mT;
+  function X(v){ return x0 + v*s; }
+  function Y(v){ return y0 + v*s; }
+  var o = '<svg viewBox="0 0 ' + W + ' ' + H.toFixed(1) + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="' + esc(ct.title) + '" font-family=\'' + TECH + '\' font-size="' + (nar ? 12 : 13) + '">';
+  o += svgDefs(pfx, c);
+  o += '<rect width="' + W + '" height="' + H.toFixed(1) + '" fill="' + c.bg + '"/>';
+  [[X(-ext), X(0)], [X(w), X(w+ext)]].forEach(function(r){
+    o += '<rect x="' + r[0] + '" y="' + Y(0) + '" width="' + (r[1]-r[0]) + '" height="' + (D*s) + '" fill="url(#' + pfx + '-ht)" opacity=".7"/>';
+    if(e > 0) o += '<rect x="' + r[0] + '" y="' + Y(0) + '" width="' + (r[1]-r[0]) + '" height="' + (e*s) + '" fill="' + c.demo + '" opacity=".35"/>';
+    o += '<line x1="' + r[0] + '" y1="' + Y(0) + '" x2="' + r[1] + '" y2="' + Y(0) + '" stroke="' + c.ink + '" stroke-width="1.6"/>';
+  });
+  if(e > 0) o += '<rect x="' + X(0) + '" y="' + Y(0) + '" width="' + (w*s) + '" height="' + (e*s) + '" fill="url(#' + pfx + '-hd)"/>';
+  o += '<rect x="' + X(0) + '" y="' + Y(e) + '" width="' + (w*s) + '" height="' + ((D-e)*s) + '" fill="' + c.terre + '" fill-opacity=".55"/>';
+  o += '<rect x="' + X(0) + '" y="' + Y(0) + '" width="' + (w*s) + '" height="' + (D*s) + '" fill="none" stroke="' + c.ink + '" stroke-width="1.6"/>';
+  if(e > 0) o += '<line x1="' + X(0) + '" y1="' + Y(e) + '" x2="' + X(w) + '" y2="' + Y(e) + '" stroke="' + c.ink + '" stroke-width="1" stroke-dasharray="4 3"/>';
+  o += svgDim([X(0),Y(0)], [X(w),Y(0)], [0,-1], 24, 'Larg. = ' + fmt(w) + ' m', c, pfx);
+  var offSide = ext*s + 14;
+  o += svgDim([X(0),Y(0)], [X(0),Y(D)], [-1,0], offSide, (e > 0 ? 'P totale = ' : 'P = ') + fmt(D) + ' m', c, pfx);
+  if(e > 0){
+    var yF = (Y(e)+Y(D))/2, yD = Math.min((Y(0)+Y(e))/2, yF - 18);
+    o += svgDim([X(w),Y(0)], [X(w),Y(e)], [1,0], offSide, 'Démolition ' + fmtCm(e), c, pfx, yD);
+    o += svgDim([X(w),Y(e)], [X(w),Y(D)], [1,0], offSide, 'Fouille ' + fmt(D - e) + ' m', c, pfx, yF);
+  }
+  return o + '</svg>';
+}
+function renderPlans(g){
+  var plan = $('plan'), cps = $('coupes');
+  var c = palette(false);
+  var pw = plan.clientWidth || 640;
+  plan.innerHTML = planSVG(g, c, 'sp', clamp(pw, 340, 640));
+  var cw = pw >= 640 && g.cuts.length > 1 ? pw/2 : pw;
+  cps.innerHTML = g.cuts.map(function(ct, i){
+    return '<figure><figcaption>' + esc(ct.title) + '</figcaption>' + coupeSVG(g, ct, c, 'sc' + i, clamp(cw, 340, 520)) + '</figure>';
+  }).join('');
+}
+
+/* ================= Photos : forme au sol (homographie) + tige ================= */
+// Homographie plan du sol (m) -> image, par 4 correspondances (DLT, h33 = 1)
+function solve(A, b){
+  var n = b.length, M = A.map(function(r, i){ return r.concat([b[i]]); });
+  for(var col = 0; col < n; col++){
+    var piv = col;
+    for(var r = col+1; r < n; r++) if(Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r;
+    if(Math.abs(M[piv][col]) < 1e-12) return null;
+    var tmp = M[col]; M[col] = M[piv]; M[piv] = tmp;
+    for(r = col+1; r < n; r++){
+      var f = M[r][col]/M[col][col];
+      for(var c2 = col; c2 <= n; c2++) M[r][c2] -= f*M[col][c2];
+    }
+  }
+  var x = new Array(n);
+  for(var i = n-1; i >= 0; i--){
+    var sum = M[i][n];
+    for(var j = i+1; j < n; j++) sum -= M[i][j]*x[j];
+    x[i] = sum/M[i][i];
+  }
+  return x;
+}
+function homography(src, dst){
+  var A = [], b = [];
+  for(var i = 0; i < 4; i++){
+    var x = src[i][0], y = src[i][1], u = dst[i][0], v = dst[i][1];
+    A.push([x, y, 1, 0, 0, 0, -u*x, -u*y]); b.push(u);
+    A.push([0, 0, 0, x, y, 1, -v*x, -v*y]); b.push(v);
+  }
+  var h = solve(A, b);
+  if(!h || h.some(function(v){ return !isFinite(v); })) return null;
+  return [[h[0],h[1],h[2]],[h[3],h[4],h[5]],[h[6],h[7],1]];
+}
+function convexQuad(q){
+  var sign = 0;
+  for(var i = 0; i < 4; i++){
+    var a = q[i], b = q[(i+1)%4], c = q[(i+2)%4];
+    var cr = (b[0]-a[0])*(c[1]-b[1]) - (b[1]-a[1])*(c[0]-b[0]);
+    if(Math.abs(cr) < 1e-9) return false;
+    var sg = cr > 0 ? 1 : -1;
+    if(sign && sg !== sign) return false;
+    sign = sg;
+  }
+  return true;
+}
+// Retourne la fonction plan (x, y en m) -> pixel photo, ou un message d'erreur
+// Calage libre : les poignées peuvent être placées n'importe où, la forme suit.
+// Rectangle et T : le contour passe exactement par les poignées (4 ou 8 angles) et chaque
+// partie rectangulaire est quadrillée avec sa propre transformation perspective (4 angles).
+// L : 4 poignées, une seule transformation pour toute la forme.
+function partMap(p, world, img){
+  var s = Math.max(p.w, p.h), cx = p.w/2, cy = p.h/2;
+  var H = homography(world, img.map(function(q){ return [(q[0]-cx)/s, (q[1]-cy)/s]; }));
+  if(!H) return null;
+  return function(x, y){
+    var w = H[2][0]*x + H[2][1]*y + H[2][2];
+    return [cx + s*(H[0][0]*x + H[0][1]*y + H[0][2])/w, cy + s*(H[1][0]*x + H[1][1]*y + H[1][2])/w, w];
+  };
+}
+function lineCross(a, b, c, d){
+  var d1x = b[0] - a[0], d1y = b[1] - a[1], d2x = d[0] - c[0], d2y = d[1] - c[1];
+  var den = d1x * d2y - d1y * d2x;
+  if(Math.abs(den) < 1e-9) return null;
+  var t = ((c[0] - a[0]) * d2y - (c[1] - a[1]) * d2x) / den;
+  return [a[0] + t * d1x, a[1] + t * d1y];
+}
+function rectCorners(r){ return [[r[0],r[2]],[r[1],r[2]],[r[1],r[3]],[r[0],r[3]]]; }
+function photoWarp(p, g){
+  if(!g || g.errs) return {ok:false, msg:'Cotes absentes.'};
+  if(!p.pts || p.pts.length !== g.corners.length) return {ok:false, msg:'Points à replacer.'};
+  var parts = [], outline, map = null;
+  if(g.type === 'L'){
+    // 6 angles. Le point (0 ; larg. A), où les deux branches se rejoignent côté extérieur, n'est pas un angle :
+    // on le retrouve à l'intersection du côté 1-6 et de la ligne 3-4 (une perspective conserve les droites).
+    var v = p.pts, J = lineCross(v[0], v[5], v[2], v[3]);
+    if(!J) J = [v[0][0] + (v[5][0] - v[0][0]) * g.wA / g.LB, v[0][1] + (v[5][1] - v[0][1]) * g.wA / g.LB];
+    parts = [
+      {r:[0, g.LA, 0, g.wA], map:partMap(p, rectCorners([0, g.LA, 0, g.wA]), [v[0], v[1], v[2], J])},
+      {r:[0, g.wB, g.wA, g.LB], map:partMap(p, rectCorners([0, g.wB, g.wA, g.LB]), [J, v[3], v[4], v[5]])}
+    ];
+    map = parts[0].map;
+    outline = v.slice();
+  } else {
+    var defs = g.type === 'T'
+      ? [{r:[0, g.LA, 0, g.wA], idx:[0,1,2,7]}, {r:[g.x1, g.x2, g.wA, g.wA + g.LB], idx:[6,3,4,5]}]
+      : [{r:[0, g.L, 0, g.w], idx:[0,1,2,3]}];
+    defs.forEach(function(d){
+      var m = partMap(p, rectCorners(d.r), d.idx.map(function(i){ return p.pts[i]; }));
+      parts.push({r:d.r, map:m});
+    });
+    map = parts[0].map;
+    outline = p.pts.slice();
+  }
+  return {ok:true, map:map, parts:parts, outline:outline};
+}
+function defaultPts(p, g){
+  var w = p.w, h = p.h;
+  if(g && g.type === 'L') return [[0.2*w,0.76*h],[0.8*w,0.76*h],[0.8*w,0.66*h],[0.3*w,0.66*h],[0.3*w,0.3*h],[0.2*w,0.3*h]];
+  if(g && g.type === 'T') return [[0.15*w,0.8*h],[0.85*w,0.8*h],[0.85*w,0.68*h],[0.55*w,0.68*h],[0.55*w,0.3*h],[0.45*w,0.3*h],[0.45*w,0.68*h],[0.15*w,0.68*h]];
+  return [[0.25*w,0.7*h],[0.75*w,0.7*h],[0.68*w,0.48*h],[0.32*w,0.48*h]];
+}
+function defaultRod(p, g){
+  var top = [p.w*0.5, p.h*0.55];
+  var wp = photoWarp(p, g);
+  if(wp.ok && wp.map){
+    var c = g.type === 'L' ? [g.LA*0.6, g.wA/2] : g.type === 'T' ? [g.LA*0.2, g.wA/2] : [g.L/2, g.w/2];
+    var m = wp.map(c[0], c[1]);
+    top = [clamp(m[0], 0, p.w), clamp(m[1], 0, p.h)];
+  }
+  return {top:top, bot:[top[0], clamp(top[1] + 0.18*p.h, 0, p.h)]};
+}
+function handlesOf(p){ return p.pts.concat([p.rod.top, p.rod.bot]); }
+
+function drawShape(ctx, p, g, wp, lw){
+  var pts = wp.outline;
+  ctx.beginPath();
+  pts.forEach(function(q, k){ if(k) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); });
+  ctx.closePath();
+  ctx.fillStyle = rgba(g.e > 0 ? DEMO_COL : '#B98A55', p.alpha);
+  ctx.fill();
+  drawGrid(ctx, g, wp, lw);
+  ctx.beginPath();
+  pts.forEach(function(q, k){ if(k) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); });
+  ctx.closePath();
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 5.2*lw; ctx.stroke();
+  ctx.strokeStyle = '#F2B705'; ctx.lineWidth = 3.2*lw; ctx.stroke();
+}
+// Quadrillage tous les GRID m, tracé par rectangles convexes de la forme (les droites restent droites après homographie)
+var GRID = 0.5;
+function drawGrid(ctx, g, wp, lw){
+  ctx.beginPath();
+  wp.parts.forEach(function(part){
+    var m = part.map, r = part.r;
+    if(!m) return;
+    // pas de quadrillage si la perspective « se retourne » dans cette partie (points croisés)
+    var ws = rectCorners(r).map(function(q){ return m(q[0], q[1])[2]; });
+    if(!(ws.every(function(w){ return w > 0; }) || ws.every(function(w){ return w < 0; }))) return;
+    var x0 = r[0], x1 = r[1], y0 = r[2], y1 = r[3], k, a, b;
+    for(k = Math.floor(x0/GRID + 1e-9) + 1; k*GRID < x1 - 1e-6; k++){
+      a = m(k*GRID, y0); b = m(k*GRID, y1);
+      ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+    }
+    for(k = Math.floor(y0/GRID + 1e-9) + 1; k*GRID < y1 - 1e-6; k++){
+      a = m(x0, k*GRID); b = m(x1, k*GRID);
+      ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+    }
+  });
+  ctx.lineCap = 'butt';
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 2.6*lw; ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.2*lw; ctx.stroke();
+}
+function drawRod(ctx, p, g, lw){
+  var T = p.rod.top, B = p.rod.bot;
+  var dx = B[0]-T[0], dy = B[1]-T[1], len = Math.hypot(dx, dy);
+  if(len < 4) return;
+  var ux = dx/len, uy = dy/len;
+  var nx = -uy, ny = ux;
+  if(nx < 0){ nx = -nx; ny = -ny; }
+  var e = g.e, D = g.type === 'T' ? (p.rodBranch === 'B' ? g.PB : g.PA) : g.Ptot;
+  // partage linéaire à l'image (approximation : la perspective le long de la tige est négligée)
+  var M = [T[0] + dx*e/D, T[1] + dy*e/D];
+  var W = 8*lw;
+  ctx.lineCap = 'butt';
+  function seg(a, b, col, wd){ ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.strokeStyle = col; ctx.lineWidth = wd; ctx.stroke(); }
+  seg(T, B, 'rgba(0,0,0,0.7)', W + 3*lw);
+  if(e > 0) seg(T, M, DEMO_COL, W);
+  seg(e > 0 ? M : T, B, '#B98A55', W);
+  // graduations
+  function tick(P, half){ seg([P[0]-nx*half, P[1]-ny*half], [P[0]+nx*half, P[1]+ny*half], '#1E2830', 2.4*lw); }
+  tick(T, 2.2*W); tick(B, 2.2*W); if(e > 0) tick(M, 1.6*W);
+  // étiquettes, à droite de la tige, sans chevauchement
+  ctx.font = '600 ' + Math.round(15*lw) + 'px ' + TECH;
+  var lab = {ink:'#1E2830', labelBg:'rgba(255,255,255,0.9)'};
+  var off = 2.2*W + 8*lw, items = [];
+  if(e > 0){
+    items.push({t:'Démol. ' + fmtCm(e), P:[(T[0]+M[0])/2, (T[1]+M[1])/2]});
+    items.push({t:'Fouille ' + fmt(D - e) + ' m', P:[(M[0]+B[0])/2, (M[1]+B[1])/2]});
+    items.push({t:'P totale ' + fmt(D) + ' m', P:B});
+  } else {
+    items.push({t:'P ' + fmt(D) + ' m', P:[(T[0]+B[0])/2, (T[1]+B[1])/2]});
+  }
+  items.forEach(function(it){ it.x = it.P[0] + nx*off; it.y = it.P[1] + ny*off; });
+  var gap = 24*lw;
+  for(var k = 1; k < items.length; k++){
+    if(items[k].y - items[k-1].y < gap) items[k].y = items[k-1].y + gap;
+  }
+  items.forEach(function(it){ labelBox(ctx, it.t, it.x, it.y, 'left', lab, lw*1.25); });
+}
+function drawHandle(ctx, q, r, lw, fill, text){
+  ctx.beginPath(); ctx.arc(q[0], q[1], r, 0, Math.PI*2);
+  ctx.fillStyle = fill; ctx.fill();
+  ctx.strokeStyle = '#1E2830'; ctx.lineWidth = 2.2*lw; ctx.stroke();
+  ctx.beginPath(); ctx.arc(q[0], q[1], 2*lw, 0, Math.PI*2); ctx.fillStyle = '#1E2830'; ctx.fill();
+  var ty = q[1] - r - r*0.8;
+  var tw = ctx.measureText(text).width;
+  ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(q[0] - tw/2 - 3*lw, ty - r*0.65, tw + 6*lw, r*1.3);
+  ctx.fillStyle = '#1E2830'; ctx.fillText(text, q[0], ty);
+}
+function drawPhoto(ctx, p, g, withUI){
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.drawImage(p.img, 0, 0, p.w, p.h);
+  if(!p.proj || !g || g.errs) return null;
+  var S = Math.max(p.w, p.h), lw = S/700;
+  var wp = photoWarp(p, g);
+  if(wp.ok) drawShape(ctx, p, g, wp, lw);
+  drawRod(ctx, p, g, lw);
+  if(withUI && p.edit){
+    var r = Math.max(14*lw, S/60);
+    ctx.font = '700 ' + Math.round(r*1.0) + 'px ' + TECH;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    p.pts.forEach(function(q, i){ drawHandle(ctx, q, r, lw, 'rgba(242,183,5,0.55)', String(i+1)); });
+    drawHandle(ctx, p.rod.top, r, lw, 'rgba(255,255,255,0.6)', 'Sol');
+    drawHandle(ctx, p.rod.bot, r, lw, 'rgba(255,255,255,0.6)', 'Fond');
+    if(p.drag >= 0) drawLoupe(ctx, p, handlesOf(p)[p.drag], S);
+  }
+  return wp;
+}
+function drawLoupe(ctx, p, pt, S){
+  var R = S/9, zoom = 2.5;
+  var cxL = pt[0] < p.w/2 ? p.w - R - S/60 : R + S/60;
+  var cyL = R + S/60;
+  var src = 2*R/zoom;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cxL, cyL, R, 0, Math.PI*2); ctx.closePath();
+  ctx.fillStyle = '#000'; ctx.fill();
+  ctx.clip();
+  ctx.drawImage(p.img, pt[0]-src/2, pt[1]-src/2, src, src, cxL-R, cyL-R, 2*R, 2*R);
+  ctx.strokeStyle = '#F2B705'; ctx.lineWidth = S/500;
+  ctx.beginPath(); ctx.moveTo(cxL - R, cyL); ctx.lineTo(cxL + R, cyL); ctx.moveTo(cxL, cyL - R); ctx.lineTo(cxL, cyL + R); ctx.stroke();
+  ctx.restore();
+  ctx.beginPath(); ctx.arc(cxL, cyL, R, 0, Math.PI*2);
+  ctx.strokeStyle = '#1E2830'; ctx.lineWidth = S/250; ctx.stroke();
+}
+function schemaSVG(g){
+  // schéma de principe (pas à l'échelle) : numéros des coins à pointer
+  var W = 150, H = 110, poly;
+  if(g.type === 'rect') poly = [[18,72],[132,72],[132,40],[18,40]];
+  else if(g.type === 'T') poly = [[14,94],[136,94],[136,72],[89,72],[89,12],[61,12],[61,72],[14,72]];
+  else poly = [[18,98],[136,98],[136,72],[46,72],[46,12],[18,12]];
+  var o = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" font-family=\'' + TECH + '\' font-size="11" font-weight="700">';
+  o += '<polygon points="' + poly.map(function(q){ return q.join(','); }).join(' ') + '" fill="#B98A55" fill-opacity=".45" stroke="currentColor" stroke-width="1.5"/>';
+  g.corners.forEach(function(ci, k){
+    var q = poly[ci];
+    o += '<circle cx="' + q[0] + '" cy="' + q[1] + '" r="8" fill="#F2B705" stroke="#1E2830"/>';
+    o += '<text x="' + q[0] + '" y="' + (q[1] + 4) + '" text-anchor="middle" fill="#1E2830">' + (k+1) + '</text>';
+  });
+  if(g.type === 'T'){
+    o += '<text x="112" y="87" text-anchor="middle" fill="currentColor" font-weight="400">A</text>';
+    o += '<text x="75" y="46" text-anchor="middle" fill="currentColor" font-weight="400">B</text>';
+  }
+  if(g.type === 'L'){
+    o += '<text x="92" y="92" text-anchor="middle" fill="currentColor" font-weight="400">A</text>';
+    o += '<text x="32" y="46" text-anchor="middle" fill="currentColor" font-weight="400">B</text>';
+  }
+  return o + '</svg>';
+}
+
+function photoCard(p){
+  var el = document.createElement('article');
+  el.className = 'photo';
+  el.innerHTML =
+    '<canvas></canvas>' +
+    '<div class="ph-tools">' +
+      '<input type="text" class="ph-cap" placeholder="Légende (ex. vue depuis le trottoir)" aria-label="Légende de la photo">' +
+      '<label class="check"><input type="checkbox" class="ph-proj"> Caler la fouille sur la photo</label>' +
+      '<div class="ph-opts" hidden>' +
+        '<div class="ph-help"><div class="ph-schema"></div><p>1. Place les points 1 à <span class="ph-n">4</span> sur les angles de la fouille, au niveau du sol, dans n\'importe quel ordre sur la photo : la forme suit.<br>' +
+          '2. Pose la tige : glisse « Sol » où tu veux (la tige suit), puis tire « Fond » jusqu\'au fond visible de la fouille.</p></div>' +
+        '<div class="ph-row" style="margin-top:8px">' +
+          '<button type="button" class="btn ph-edit">Ajuster</button>' +
+          '<button type="button" class="btn ph-reset">Replacer la forme et la tige</button>' +
+        '</div>' +
+        '<div class="ph-row ph-branch" style="margin-top:8px" hidden>' +
+          '<label>Tige sur la branche <select class="ph-rodb"><option value="A">A</option><option value="B">B</option></select></label>' +
+        '</div>' +
+        '<div class="ph-row" style="margin-top:8px">' +
+          '<label>Opacité de la forme <input type="range" class="ph-alpha" min="15" max="85" step="5"></label>' +
+        '</div>' +
+        '<p class="ph-status" style="margin-top:8px"></p>' +
+      '</div>' +
+      '<div class="ph-row"><button type="button" class="btn danger ph-del">Supprimer la photo</button></div>' +
+    '</div>';
+  var cvp = el.querySelector('canvas');
+  cvp.width = p.w; cvp.height = p.h;
+  cvp.setAttribute('aria-label', 'Photo ' + (F().photos.indexOf(p)+1));
+  var cap = el.querySelector('.ph-cap'), chk = el.querySelector('.ph-proj'), opts = el.querySelector('.ph-opts');
+  var btnEdit = el.querySelector('.ph-edit'), alp = el.querySelector('.ph-alpha');
+  var status = el.querySelector('.ph-status');
+  cap.value = p.caption; chk.checked = p.proj; opts.hidden = !p.proj;
+  alp.value = String(Math.round(p.alpha*100));
+  var rodb = el.querySelector('.ph-rodb');
+  el.querySelector('.ph-branch').hidden = !(current && current.type === 'T');
+  rodb.value = p.rodBranch || 'A';
+  rodb.addEventListener('change', function(){ p.rodBranch = rodb.value; redraw(); });
+  el.querySelector('.ph-schema').innerHTML = current && !current.errs ? schemaSVG(current) : '';
+  el.querySelector('.ph-n').textContent = current && current.corners ? current.corners.length : 4;
+  // poignées d'une ancienne version (ex. T à 4 points) : on replace forme et tige
+  if(p.proj && current && !current.errs && (!p.pts || p.pts.length !== current.corners.length)){
+    p.pts = defaultPts(p, current); p.rod = defaultRod(p, current);
+  }
+
+  function redraw(){
+    var wp = drawPhoto(cvp.getContext('2d'), p, current, true);
+    btnEdit.textContent = p.edit ? 'Terminer' : 'Ajuster';
+    btnEdit.classList.toggle('on', p.edit);
+    cvp.classList.toggle('editing', p.proj && p.edit);
+    if(wp){
+      status.textContent = wp.ok
+        ? 'Forme au sol calée sur les angles placés, quadrillage tous les 0,50 m. Tige réglée à la main : repère visuel, pas une mesure.'
+        : wp.msg;
+      status.classList.toggle('bad', !wp.ok);
+    } else status.textContent = '';
+  }
+  cap.addEventListener('input', function(){ p.caption = cap.value; });
+  chk.addEventListener('change', function(){
+    p.proj = chk.checked; opts.hidden = !p.proj;
+    if(p.proj && !p.pts){ p.pts = defaultPts(p, current); p.rod = defaultRod(p, current); }
+    p.edit = p.proj;
+    redraw();
+  });
+  btnEdit.addEventListener('click', function(){ p.edit = !p.edit; redraw(); });
+  el.querySelector('.ph-reset').addEventListener('click', function(){
+    p.pts = defaultPts(p, current); p.rod = defaultRod(p, current); p.edit = true; redraw();
+  });
+  alp.addEventListener('input', function(){ p.alpha = Number(alp.value)/100; redraw(); });
+  el.querySelector('.ph-del').addEventListener('click', function(){
+    F().photos.splice(F().photos.indexOf(p), 1);
+    renderPhotos();
+  });
+
+  function toImg(ev){
+    var r = cvp.getBoundingClientRect();
+    return [(ev.clientX - r.left)*cvp.width/r.width, (ev.clientY - r.top)*cvp.height/r.height, cvp.width/r.width];
+  }
+  var grab = null;
+  cvp.addEventListener('pointerdown', function(ev){
+    if(!(p.proj && p.edit)) return;
+    var m = toImg(ev), best = -1, bd = 34*m[2];
+    handlesOf(p).forEach(function(q, i){ var d = Math.hypot(q[0]-m[0], q[1]-m[1]); if(d <= bd){ bd = d; best = i; } });
+    if(best < 0) return;
+    ev.preventDefault();
+    var h = handlesOf(p)[best];
+    grab = {i:best, dx:h[0]-m[0], dy:h[1]-m[1]};
+    p.drag = best;
+    try{ cvp.setPointerCapture(ev.pointerId); }catch(err){}
+    redraw();
+  });
+  cvp.addEventListener('pointermove', function(ev){
+    if(!grab) return;
+    var m = toImg(ev);
+    var np = [clamp(m[0]+grab.dx, 0, p.w), clamp(m[1]+grab.dy, 0, p.h)];
+    if(grab.i < p.pts.length) p.pts[grab.i] = np;
+    else if(grab.i === p.pts.length){
+      var ddx = np[0]-p.rod.top[0], ddy = np[1]-p.rod.top[1];
+      p.rod.top = np;
+      p.rod.bot = [clamp(p.rod.bot[0]+ddx, 0, p.w), clamp(p.rod.bot[1]+ddy, 0, p.h)];
+    } else p.rod.bot = np;
+    redraw();
+  });
+  function end(){ if(grab){ grab = null; p.drag = -1; redraw(); } }
+  cvp.addEventListener('pointerup', end);
+  cvp.addEventListener('pointercancel', end);
+  redraw();
+  return el;
+}
+function renderPhotos(){
+  var box = $('photos'), photos = F().photos;
+  box.innerHTML = '';
+  photos.forEach(function(p){ box.appendChild(photoCard(p)); });
+  var left = MAXPH - photos.length;
+  $('ph-count').textContent = left > 0 ? (photos.length + ' / ' + MAXPH + ' photos.') : '4 photos : maximum atteint.';
+  $('ph-add').hidden = left <= 0;
+  $('ph-camlbl').hidden = left <= 0;
+}
+function loadImage(file){
+  return new Promise(function(resolve, reject){
+    var url = URL.createObjectURL(file);
+    var im = new Image();
+    im.onload = function(){
+      var sc = Math.min(1, MAXPX/Math.max(im.naturalWidth, im.naturalHeight));
+      var w = Math.round(im.naturalWidth*sc), h = Math.round(im.naturalHeight*sc);
+      var c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(im, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      var data = c.toDataURL('image/jpeg', 0.85);
+      var im2 = new Image();
+      im2.onload = function(){ resolve({img:im2, w:w, h:h, data:data}); };
+      im2.onerror = reject;
+      im2.src = data;
+    };
+    im.onerror = function(){ URL.revokeObjectURL(url); reject(new Error('format')); };
+    im.src = url;
+  });
+}
+function onPhotoFiles(){
+  var photos = F().photos;
+  var files = Array.prototype.slice.call(this.files || []).slice(0, MAXPH - photos.length);
+  var input = this, failed = 0;
+  Promise.all(files.map(function(f){
+    return loadImage(f).then(function(r){
+      var ph = {id:++phSeq, img:r.img, w:r.w, h:r.h, data:r.data, caption:'', proj:false, edit:false, pts:null, rod:null, alpha:0.4, drag:-1};
+      photos.push(ph);
+      return savePhoto(ph);
+    }).catch(function(){ failed++; });
+  })).then(function(){
+    input.value = '';
+    renderPhotos();
+    scheduleSave();
+    if(failed) $('ph-count').textContent = failed + ' photo(s) non lue(s) : format non pris en charge par ce navigateur (HEIC ?). Exporter en JPEG.';
+  });
+}
+$('ph-input').addEventListener('change', onPhotoFiles);
+$('ph-cam').addEventListener('change', onPhotoFiles);
+
+/* ================= Rapport PDF ================= */
+function frDate(v){ if(!v) return ''; var p = v.split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : v; }
+function row(label, val, cls){
+  var v = (val === undefined || val === null || String(val).trim() === '') ? '—' : val;
+  return '<tr><th>' + label + '</th><td' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</td></tr>';
+}
+function fouillePages(f, multi, head, chantierTable, obsTable, c){
+  var g = f.g;
+  var cvs = document.createElement('canvas');
+  cvs.width = 1800; cvs.height = 1100;
+  render3D(cvs.getContext('2d'), 1800, 1100, g, {az:state.az, el:state.el, vex:state.vex, k:2.2, print:true});
+  var img = cvs.toDataURL('image/png');
+  var geo = '';
+  if(g.type === 'T'){
+    tRows(g).forEach(function(r){ geo += row(r[0], r[1], r[2] ? 'n' : ''); });
+  } else if(g.type === 'rect'){
+    geo += row('Forme', 'Rectangulaire') + row('Longueur', fmt(g.L) + ' m', 'n') + row('Largeur', fmt(g.w) + ' m', 'n');
+  } else {
+    geo += row('Forme', 'En L (longueurs côté extérieur de l\'angle)');
+    geo += row('Branche A : longueur / largeur', fmt(g.LA) + ' m / ' + fmt(g.wA) + ' m', 'n');
+    geo += row('Branche B : longueur / largeur', fmt(g.LB) + ' m / ' + fmt(g.wB) + ' m', 'n');
+  }
+  if(g.type === 'T'){ /* profondeurs déjà dans tRows */ }
+  else if(g.e > 0){
+    geo += row('Profondeur totale mesurée', fmt(g.P) + ' m', 'n');
+    geo += row('Démolition', DEMO_MAT + ', ' + fmtCm(g.e), 'n');
+    geo += row('Épaisseur de démolition', 'comprise dans la profondeur totale');
+    geo += row('Profondeur fouille / totale', fmt(g.Pf) + ' m / ' + fmt(g.Ptot) + ' m', 'n');
+  } else {
+    geo += row('Profondeur', fmt(g.Ptot) + ' m', 'n') + row('Démolition', 'Aucune');
+  }
+  var vol = row('Emprise', fmt(g.area) + ' m²', 'n');
+  if(g.e > 0) vol += row('Volume démolition', fmt(g.Vd, 3) + ' m³', 'n') + row('Volume fouille', fmt(g.Vf, 3) + ' m³', 'n');
+  if(g.type === 'T') tVolRows(g).forEach(function(r){ vol += row(r[0], r[1], 'n'); });
+  vol += '<tr class="tot"><th>Volume total en place</th><td class="n">' + fmt(g.Vt, 3) + ' m³</td></tr>';
+  var name = esc(fLabel(f));
+  var com = fComment(f);
+  var comTable = '<table>' + row('Commentaire', com ? esc(com).replace(/\n/g, '<br>') : '') + '</table>';
+  var notes = '<ul class="r-notes"><li>Volumes en place, non foisonnés, calculés à partir des cotes relevées sur le terrain.</li>';
+  if(state.vex !== 1) notes += '<li>Vue 3D : exagération verticale ×' + state.vex + ' (affichage uniquement, cotes en valeurs réelles).</li>';
+  notes += '<li>Vues 2D à l\'échelle, sans exagération.</li></ul>';
+
+  var html = '<section class="r-page">';
+  if(multi){
+    html += head(name) +
+      '<div class="r-grid"><div><h2>Géométrie</h2><table>' + geo + '</table></div>' +
+      '<div><h2>Volumes</h2><table>' + vol + '</table></div></div>' + comTable;
+  } else {
+    html += head(f.name ? esc(f.name) : '') +
+      '<div class="r-grid"><div><h2>Chantier</h2>' + chantierTable + '</div>' +
+      '<div><h2>Géométrie</h2><table>' + geo + '</table></div></div>' + obsTable + comTable +
+      '<h2>Volumes</h2><table>' + vol + '</table>';
+  }
+  html += '<h2>Vue 3D</h2><img class="r-3d" alt="Vue 3D de la fouille" src="' + img + '"></section>';
+  html += '<section class="r-page">' + head((multi ? name + ', ' : '') + 'vues 2D') +
+    '<h2>Vue de dessus</h2><div class="r-plan">' + planSVG(g, c, 'rp' + f.id) + '</div>' +
+    '<h2>Coupes</h2><div class="r-coupes">' + g.cuts.map(function(ct, i){
+      return '<figure><figcaption>' + esc(ct.title) + '</figcaption>' + coupeSVG(g, ct, c, 'rc' + f.id + '_' + i, 400) + '</figure>';
+    }).join('') + '</div>' + notes + '</section>';
+
+  var photos = f.photos;
+  for(var i = 0; i < photos.length; i += 2){
+    html += '<section class="r-page">' + head((multi ? name + ', ' : '') + 'photos');
+    photos.slice(i, i+2).forEach(function(p, k){
+      var pc = document.createElement('canvas'); pc.width = p.w; pc.height = p.h;
+      drawPhoto(pc.getContext('2d'), p, g, false);
+      var src = p.proj ? pc.toDataURL('image/jpeg', 0.85) : p.data;
+      var cap = 'Photo ' + (i+k+1) + (p.caption.trim() ? ' : ' + esc(p.caption.trim()) : '');
+      if(p.proj) cap += '<br><span style="color:#5E6A72">Forme au sol calée sur les angles placés à la main (quadrillage 0,50 m) ; tige P / démolition réglée à la main (repère visuel).</span>';
+      html += '<figure class="r-photo"><img src="' + src + '" alt="Photo ' + (i+k+1) + '"><figcaption>' + cap + '</figcaption></figure>';
+    });
+    html += '</section>';
+  }
+  return html;
+}
+function buildReport(){
+  var list = doneList();
+  if(!list.length) return false;
+  var c = palette(true);
+  var v = function(id){ return esc($(id).value.trim()); };
+  var aff = v('affaire'), dte = frDate($('date').value);
+  var head = function(sub){
+    return '<div class="r-head"><h1>Relevé de fouille' + (sub ? ' : ' + sub : '') + '</h1><div class="r-ref">' +
+      (aff ? 'Affaire ' + aff : '') + (aff && dte ? '<br>' : '') + (dte || '') + '</div></div><div class="r-band"></div>';
+  };
+  var chantierTable = '<table>' +
+    row('N° d\'affaire', aff) + row('Date du relevé', dte) + row('Adresse', v('adresse')) +
+    row('Commune', v('commune')) + row('Entreprise', v('entreprise')) + row('Rédacteur', v('redacteur')) + '</table>';
+  var obsTable = '<table>' + row('Observations', v('obs').replace(/\n/g,'<br>')) + '</table>';
+  var multi = list.length > 1;
+  var html = '';
+  if(multi){
+    html += '<section class="r-page">' + head('récapitulatif') +
+      '<h2>Chantier</h2>' + chantierTable + obsTable +
+      '<h2>Fouilles (' + list.length + ')</h2>' + recapHTML(list) +
+      '<ul class="r-notes"><li>Volumes en place, non foisonnés, calculés à partir des cotes relevées sur le terrain.</li>' +
+      '<li>Le détail de chaque fouille (géométrie, vue 3D, plan, coupes, photos) suit ce récapitulatif.</li></ul></section>';
+  }
+  list.forEach(function(f){ html += fouillePages(f, multi, head, chantierTable, obsTable, c); });
+  var cut = html.lastIndexOf('</section>');
+  html = html.slice(0, cut) + sigHTML() + html.slice(cut);
+  $('report').innerHTML = html;
+  return true;
+}
+
+/* ================= Navigation / interface ================= */
+function syncInput(){
+  var T = state.type === 'T';
+  var L = state.type === 'L' || T;
+  document.querySelectorAll('.seg button[data-type]').forEach(function(b){ b.setAttribute('aria-checked', String(b.dataset.type === state.type)); });
+  $('lb-a').textContent = L ? 'Longueur A' : 'Longueur';
+  $('lb-b').textContent = L ? 'Largeur A' : 'Largeur';
+  $('sub-a').textContent = L ? 'branche A' : '';
+  $('sub-b').textContent = L ? 'branche A' : '';
+  $('c-lb').hidden = !L; $('c-wb').hidden = !L; $('hint-L').hidden = state.type !== 'L';
+  $('hint-T').hidden = !T; $('c-pb').hidden = !T;
+  $('sub-lb').textContent = T ? 'depuis le bord de A' : 'branche B';
+  $('lb-p').textContent = T ? 'Profondeur A' : 'Profondeur P';
+  $('sub-p').textContent = T ? 'branche A, depuis la surface' : 'totale, depuis la surface';
+}
+function loadInputs(f){
+  FIELDS.forEach(function(id){ $(id).value = f.vals[id] || ''; });
+  state.type = f.type; state.mode = 'incl';
+  $('input-errs').innerHTML = '';
+  document.querySelectorAll('.cart').forEach(function(c){ c.classList.remove('bad'); });
+  $('in-title').textContent = 'Fouille ' + fNum(f) + (f.g ? ' (modification)' : '');
+  $('cancel').hidden = !(f.g || doneList().length);
+  syncInput();
+}
+function saveInputs(f){
+  FIELDS.forEach(function(id){ f.vals[id] = $(id).value; });
+  f.type = state.type; f.mode = state.mode;
+  f.name = $('in-name').value.trim();
+}
+function goInput(){ loadInputs(F()); showStep('input'); }
+function selectFouille(i){ cur = i; current = F().g; showStep('result'); }
+function renderFouilleBar(){
+  var list = doneList();
+  var chips = $('chips');
+  chips.innerHTML = '';
+  fouilles.forEach(function(f, i){
+    if(!f.g) return;
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', String(i === cur));
+    b.textContent = fLabel(f);
+    b.addEventListener('click', function(){ selectFouille(i); });
+    chips.appendChild(b);
+  });
+  $('recap').hidden = list.length < 2;
+  $('recap-body').innerHTML = list.length >= 2 ? recapHTML(list) : '';
+  $('del-f').hidden = list.length < 2;
+  $('pdf').textContent = list.length > 1 ? 'Exporter les ' + list.length + ' fouilles en PDF' : 'Exporter en PDF';
+}
+function showStep(step){
+  state.step = step;
+  $('step-input').hidden = step !== 'input';
+  $('step-result').hidden = step !== 'result';
+  $('validate').hidden = step !== 'input';
+  $('pdf').hidden = step !== 'result';
+  $('mail').hidden = step !== 'result';
+  if(step !== 'result') $('mail-ready').hidden = true;
+  $('pdf-msg').hidden = step !== 'result';
+  window.scrollTo(0, 0);
+  if(step === 'result'){
+    renderFouilleBar();
+    $('sw-demo').style.background = palette(false).demo;
+    $('lg-demo').textContent = 'Démolition (grave ciment)';
+    $('sw-demo').parentNode.hidden = !current.demo;
+    renderResults(current);
+    renderPlans(current);
+    draw3D();
+    renderPhotos();
+    renderSigs();
+    $('pdf-msg').classList.remove('bad');
+    $('pdf-msg').textContent = pdfHint();
+  }
+}
+$('step-input').addEventListener('submit', function(ev){
+  ev.preventDefault();
+  document.querySelectorAll('.cart').forEach(function(c){ c.classList.remove('bad'); });
+  var g = compute();
+  if(g.errs){
+    $('input-errs').innerHTML = '<ul class="errs">' + g.errs.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+    g.bad.forEach(function(id){ $(id).classList.add('bad'); });
+    var first = document.querySelector('.cart.bad input');
+    if(first) first.focus();
+    return;
+  }
+  $('input-errs').innerHTML = '';
+  var f = F();
+  saveInputs(f);
+  f.g = g;
+  f.draft = null;
+  current = g;
+  if(document.activeElement) document.activeElement.blur();
+  try{ history.pushState({step:'result'}, ''); }catch(err){}
+  showStep('result');
+});
+window.addEventListener('popstate', function(){
+  if(state.step === 'result') goInput();
+});
+$('back').addEventListener('click', function(){
+  if(history.state && history.state.step === 'result') history.back();
+  else goInput();
+});
+$('add-f').addEventListener('click', function(){
+  var f = newFouille(F());
+  fouilles.push(f);
+  cur = fouilles.length - 1;
+  current = null;
+  loadInputs(f);
+  showStep('input');
+  $('in-a').focus();
+});
+$('cancel').addEventListener('click', function(){
+  var f = F();
+  if(!f.g){
+    fouilles.splice(cur, 1);
+    cur = fouilles.length - 1;
+  }
+  F().draft = null;
+  loadInputs(F());
+  current = F().g;
+  showStep('result');
+});
+$('del-f').addEventListener('click', function(){
+  var f = F();
+  if(!window.confirm('Supprimer « ' + fLabel(f) + ' » ? Ses cotes et ses photos seront perdues.')) return;
+  fouilles.splice(cur, 1);
+  cur = Math.min(cur, fouilles.length - 1);
+  selectFouille(cur);
+});
+window.addEventListener('beforeunload', function(ev){
+  if(saveTimer){ saveNow(); ev.preventDefault(); ev.returnValue = ''; }
+});
+document.querySelectorAll('.seg button[data-type]').forEach(function(b){
+  b.addEventListener('click', function(){ state.type = b.dataset.type; syncInput(); });
+});
+['in-a','in-b','in-lb','in-wb','in-p','in-pb','in-e'].forEach(function(id){
+  $(id).addEventListener('input', function(){ $(id).closest('.cart').classList.remove('bad'); $('input-errs').innerHTML = ''; });
+});
+$('vex').addEventListener('change', function(){ state.vex = Number(this.value); draw3D(); });
+document.querySelectorAll('[data-view]').forEach(function(b){
+  b.addEventListener('click', function(){ var v = VIEWS[b.dataset.view]; state.az = v[0]; state.el = v[1]; draw3D(); });
+});
+
+var drag = null;
+cv.addEventListener('pointerdown', function(ev){
+  drag = {x:ev.clientX, y:ev.clientY, az:state.az, el:state.el};
+  try{ cv.setPointerCapture(ev.pointerId); }catch(err){}
+});
+cv.addEventListener('pointermove', function(ev){
+  if(!drag) return;
+  state.az = drag.az - (ev.clientX - drag.x)*0.5;
+  state.el = clamp(drag.el + (ev.clientY - drag.y)*0.4, 5, 90);
+  draw3D();
+});
+['pointerup','pointercancel','lostpointercapture'].forEach(function(t){ cv.addEventListener(t, function(){ drag = null; }); });
+cv.addEventListener('keydown', function(ev){
+  var used = true;
+  if(ev.key === 'ArrowLeft') state.az += 5;
+  else if(ev.key === 'ArrowRight') state.az -= 5;
+  else if(ev.key === 'ArrowUp') state.el = clamp(state.el + 5, 5, 90);
+  else if(ev.key === 'ArrowDown') state.el = clamp(state.el - 5, 5, 90);
+  else used = false;
+  if(used){ ev.preventDefault(); draw3D(); }
+});
+var lastPW = 0;
+if(window.ResizeObserver) new ResizeObserver(function(){
+  draw3D();
+  var pw = $('plan').clientWidth;
+  if(state.step === 'result' && Math.abs(pw - lastPW) > 20 && current){ lastPW = pw; renderPlans(current); }
+}).observe(cv);
+else window.addEventListener('resize', function(){ draw3D(); if(state.step === 'result') renderPlans(current); });
+if(window.matchMedia){
+  var mq = matchMedia('(prefers-color-scheme: dark)');
+  if(mq.addEventListener) mq.addEventListener('change', function(){ if(state.step === 'result') showStep('result'); });
+}
+
+// Dans l'appli Android (Capacitor), window.print() ne fonctionne pas : on passe par le module natif « WebPrint ».
+function isApp(){
+  var cap = window.Capacitor;
+  return !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform() && typeof cap.nativePromise === 'function');
+}
+function pdfName(){
+  var aff = $('affaire').value.trim().replace(/[^\w\-]+/g, '_');
+  return 'Releve-fouille' + (aff ? '_' + aff : '') + '_' + ($('date').value || '');
+}
+function printReport(){
+  if(isApp()){
+    window.Capacitor.nativePromise('WebPrint', 'print', {name: pdfName()}).catch(function(err){
+      var msg = $('pdf-msg');
+      msg.classList.add('bad');
+      msg.textContent = 'Impression impossible : ' + ((err && err.message) || err);
+    });
+  } else {
+    window.print();
+  }
+}
+function pdfHint(){
+  return isApp()
+    ? 'Dans la fenêtre d\'impression, choisir l\'imprimante « Enregistrer au format PDF ».'
+    : 'Dans la fenêtre d\'impression, choisir « Enregistrer en PDF ».';
+}
+$('pdf').addEventListener('click', function(){
+  var msg = $('pdf-msg');
+  if(!buildReport()){
+    msg.classList.add('bad');
+    msg.textContent = 'Export impossible : revenir aux cotes et valider.';
+    return;
+  }
+  var imgs = Array.prototype.slice.call($('report').querySelectorAll('img'));
+  Promise.all(imgs.map(function(im){
+    return im.complete ? Promise.resolve() : new Promise(function(r){ im.onload = r; im.onerror = r; });
+  })).then(function(){ setTimeout(printReport, 80); });
+});
+window.addEventListener('beforeprint', function(){ if(state.step === 'result') buildReport(); });
+
+(function initDate(){
+  var d = new Date();
+  $('date').value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+})();
+/* ================= PDF en fichier (envoi par email) ================= */
+// Le PDF « Exporter » passe par l'impression et ne donne pas de fichier à la page.
+// Ici, chaque page A4 est dessinée sur un canvas (150 dpi), puis assemblée en PDF (images JPEG).
+var PDF_W = 1240, PDF_H = 1754, PDF_M = 70;
+function pFont(size, bold, tech){ return (bold ? '600 ' : '') + size + 'px ' + (tech ? TECH : BODY); }
+function pWrap(ctx, text, maxW){
+  var out = [];
+  String(text == null ? '' : text).split('\n').forEach(function(para){
+    var line = '';
+    para.split(' ').forEach(function(w){
+      while(ctx.measureText(w).width > maxW && w.length > 1){ // mot trop long : coupe
+        var k = w.length - 1;
+        while(k > 1 && ctx.measureText(w.slice(0, k)).width > maxW) k--;
+        if(line){ out.push(line); line = ''; }
+        out.push(w.slice(0, k)); w = w.slice(k);
+      }
+      var t = line ? line + ' ' + w : w;
+      if(ctx.measureText(t).width > maxW && line){ out.push(line); line = w; } else line = t;
+    });
+    out.push(line);
+  });
+  return out;
+}
+function PdfDoc(aff, dte){
+  this.pages = []; this.aff = aff; this.dte = dte; this.sub = ''; this.pg = null;
+}
+PdfDoc.prototype.newPage = function(sub){
+  var c = document.createElement('canvas');
+  c.width = PDF_W; c.height = PDF_H;
+  var x = c.getContext('2d');
+  x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, PDF_W, PDF_H);
+  this.sub = sub;
+  this.pg = {c:c, x:x, y:PDF_M};
+  this.pages.push(this.pg);
+  // en-tête
+  var right = [this.aff ? 'Affaire ' + this.aff : '', this.dte || ''].filter(Boolean);
+  x.fillStyle = '#1E2830'; x.textBaseline = 'alphabetic';
+  x.font = pFont(20, true, true);
+  var rw = right.reduce(function(m, t){ return Math.max(m, x.measureText(t).width); }, 0);
+  var title = 'Relevé de fouille' + (sub ? ' : ' + sub : '');
+  var fs = 36;
+  x.font = pFont(fs, true, true);
+  while(fs > 22 && x.measureText(title).width > PDF_W - 2*PDF_M - rw - 20){ fs -= 2; x.font = pFont(fs, true, true); }
+  x.textAlign = 'left'; x.fillText(title, PDF_M, PDF_M + 36);
+  x.font = pFont(20, true, true); x.textAlign = 'right';
+  right.forEach(function(t, i){ x.fillText(t, PDF_W - PDF_M, PDF_M + 14 + i*24); });
+  x.fillRect(PDF_M, PDF_M + 52, PDF_W - 2*PDF_M, 5);
+  x.save();
+  x.beginPath(); x.rect(PDF_M, PDF_M + 64, PDF_W - 2*PDF_M, 10); x.clip();
+  for(var i = -1; i * 32 < PDF_W; i++){
+    x.fillStyle = i % 2 ? '#1E2830' : '#F2B705';
+    x.beginPath();
+    x.moveTo(PDF_M + i*32, PDF_M + 74); x.lineTo(PDF_M + i*32 + 32, PDF_M + 74);
+    x.lineTo(PDF_M + i*32 + 42, PDF_M + 64); x.lineTo(PDF_M + i*32 + 10, PDF_M + 64);
+    x.closePath(); x.fill();
+  }
+  x.restore();
+  this.pg.y = PDF_M + 96;
+  return this.pg;
+};
+PdfDoc.prototype.ensure = function(h){
+  if(this.pg.y + h > PDF_H - PDF_M) this.newPage(this.sub + (/\(suite\)$/.test(this.sub) ? '' : ' (suite)'));
+};
+PdfDoc.prototype.h2 = function(text){
+  this.ensure(90);
+  var x = this.pg.x;
+  x.fillStyle = '#1E2830'; x.font = pFont(24, true, true); x.textAlign = 'left'; x.textBaseline = 'top';
+  x.fillText(text, PDF_M, this.pg.y + 10);
+  this.pg.y += 46;
+};
+// rows : [libellé, valeur, {num, total}]
+PdfDoc.prototype.table = function(rows, x0, w, labelRatio){
+  x0 = x0 == null ? PDF_M : x0; w = w || (PDF_W - 2*PDF_M);
+  var lw = Math.round(w * (labelRatio || 0.42)), pad = 10, fs = 19, lh = 25;
+  var self = this;
+  rows.forEach(function(r){
+    var x = self.pg.x, o = r[2] || {};
+    x.font = pFont(fs, true); var ll = pWrap(x, r[0], lw - 2*pad);
+    x.font = pFont(fs, false); var vl = pWrap(x, (r[1] == null || String(r[1]).trim() === '') ? '—' : r[1], w - lw - 2*pad);
+    var h = Math.max(ll.length, vl.length) * lh + 2*pad - 4;
+    self.ensure(h); x = self.pg.x;
+    var y = self.pg.y;
+    x.fillStyle = o.total ? '#1E2830' : '#EDEFEA'; x.fillRect(x0, y, lw, h);
+    if(o.total) x.fillRect(x0 + lw, y, w - lw, h);
+    x.strokeStyle = '#9AA39A'; x.lineWidth = 1.2; x.strokeRect(x0, y, lw, h); x.strokeRect(x0 + lw, y, w - lw, h);
+    x.fillStyle = o.total ? '#FFFFFF' : '#1E2830'; x.textBaseline = 'top';
+    x.font = pFont(fs, true); x.textAlign = 'left';
+    ll.forEach(function(l, i){ x.fillText(l, x0 + pad, y + pad + i*lh); });
+    x.font = pFont(fs, o.total, o.num); x.textAlign = o.num ? 'right' : 'left';
+    vl.forEach(function(l, i){ x.fillText(l, o.num ? x0 + w - pad : x0 + lw + pad, y + pad + i*lh); });
+    self.pg.y += h;
+  });
+  self.pg.y += 8;
+};
+PdfDoc.prototype.image = function(src, maxH, x0, w){
+  if(!src) return;
+  x0 = x0 == null ? PDF_M : x0; w = w || (PDF_W - 2*PDF_M);
+  var sw = src.naturalWidth || src.width, sh = src.naturalHeight || src.height;
+  var s = Math.min(w/sw, maxH/sh), dw = sw*s, dh = sh*s;
+  this.ensure(dh + 10);
+  var x = this.pg.x;
+  x.drawImage(src, x0 + (w - dw)/2, this.pg.y, dw, dh);
+  x.strokeStyle = '#9AA39A'; x.lineWidth = 1.2; x.strokeRect(x0 + (w - dw)/2, this.pg.y, dw, dh);
+  this.pg.y += dh + 10;
+};
+PdfDoc.prototype.text = function(lines, size, color){
+  var self = this;
+  lines.forEach(function(t){
+    var x = self.pg.x;
+    x.font = pFont(size || 16); 
+    var ls = pWrap(x, t, PDF_W - 2*PDF_M - 20);
+    self.ensure(ls.length * (size || 16) * 1.4 + 4);
+    x = self.pg.x; x.font = pFont(size || 16);
+    x.fillStyle = color || '#5E6A72'; x.textAlign = 'left'; x.textBaseline = 'top';
+    ls.forEach(function(l, i){ x.fillText((i ? '   ' : '• ') + l, PDF_M, self.pg.y + i*(size || 16)*1.4); });
+    self.pg.y += ls.length * (size || 16) * 1.4 + 4;
+  });
+};
+PdfDoc.prototype.recap = function(list){
+  var cols = [
+    {t:'Fouille', w:0.22}, {t:'Dimensions', w:0.21}, {t:'P totale', w:0.08, n:1}, {t:'Démol.', w:0.07, n:1},
+    {t:'Emprise', w:0.1, n:1}, {t:'V démol.', w:0.1, n:1}, {t:'V fouille', w:0.11, n:1}, {t:'V total', w:0.11, n:1}
+  ];
+  var W = PDF_W - 2*PDF_M, pad = 7, fs = 15, lh = 20, self = this;
+  var tot = {area:0, Vd:0, Vf:0, Vt:0};
+  function drawRow(cells, style){
+    var x = self.pg.x;
+    var wrapped = cells.map(function(v, i){
+      x.font = pFont(i === 0 && style === 'sub' ? fs - 2 : fs, style === 'head' || style === 'tot');
+      return pWrap(x, v, cols[i].w*W - 2*pad);
+    });
+    var h = Math.max.apply(null, wrapped.map(function(l){ return l.length; })) * lh + 2*pad;
+    self.ensure(h); x = self.pg.x;
+    var y = self.pg.y, cx = PDF_M;
+    if(style === 'head'){ x.fillStyle = '#EDEFEA'; x.fillRect(PDF_M, y, W, h); }
+    if(style === 'tot'){ x.fillStyle = '#1E2830'; x.fillRect(PDF_M, y, W, h); }
+    cols.forEach(function(col, i){
+      var cw = col.w*W;
+      x.strokeStyle = '#9AA39A'; x.lineWidth = 1; x.strokeRect(cx, y, cw, h);
+      x.fillStyle = style === 'tot' ? '#FFFFFF' : '#1E2830';
+      x.font = pFont(fs, style === 'head' || style === 'tot', !!col.n && style !== 'head');
+      x.textAlign = col.n ? 'right' : 'left'; x.textBaseline = 'top';
+      wrapped[i].forEach(function(l, k){
+        if(i === 0 && k > 0 && cells.sub){ x.fillStyle = '#5E6A72'; }
+        x.fillText(l, col.n ? cx + cw - pad : cx + pad, y + pad + k*lh);
+      });
+      cx += cw;
+    });
+    self.pg.y += h;
+  }
+  drawRow(cols.map(function(c){ return c.t; }), 'head');
+  list.forEach(function(f){
+    var g = f.g, cm = fComment(f);
+    tot.area += g.area; tot.Vd += g.Vd; tot.Vf += g.Vf; tot.Vt += g.Vt;
+    drawRow([fLabel(f) + (cm ? '\n' + (cm.length > 90 ? cm.slice(0, 90) + '…' : cm) : ''), dimsText(g), depthShort(g),
+      g.e > 0 ? fmtCm(g.e) : '—', fmt(g.area) + ' m²', fmt(g.Vd, 3) + ' m³', fmt(g.Vf, 3) + ' m³', fmt(g.Vt, 3) + ' m³']);
+  });
+  drawRow(['Total (' + list.length + ' fouilles)', '', '', '', fmt(tot.area) + ' m²', fmt(tot.Vd, 3) + ' m³', fmt(tot.Vf, 3) + ' m³', fmt(tot.Vt, 3) + ' m³'], 'tot');
+  this.pg.y += 8;
+};
+function svgToImage(svg, scale){
+  return new Promise(function(resolve){
+    var m = svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);
+    if(!m){ resolve(null); return; }
+    var s2 = svg.replace('<svg ', '<svg width="' + Math.round(m[1]*scale) + '" height="' + Math.round(m[2]*scale) + '" ');
+    var im = new Image();
+    im.onload = function(){ resolve(im); };
+    im.onerror = function(){ resolve(null); };
+    im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s2);
+  });
+}
+function fouilleRows(f){
+  var g = f.g, geo = [], vol = [];
+  if(g.type === 'T'){
+    tRows(g).forEach(function(r){ geo.push([r[0], r[1], r[2] ? {num:1} : null]); });
+  } else if(g.type === 'rect'){
+    geo.push(['Forme', 'Rectangulaire'], ['Longueur', fmt(g.L) + ' m', {num:1}], ['Largeur', fmt(g.w) + ' m', {num:1}]);
+  } else {
+    geo.push(['Forme', 'En L (longueurs côté extérieur de l\'angle)'],
+      ['Branche A : longueur / largeur', fmt(g.LA) + ' m / ' + fmt(g.wA) + ' m', {num:1}],
+      ['Branche B : longueur / largeur', fmt(g.LB) + ' m / ' + fmt(g.wB) + ' m', {num:1}]);
+  }
+  if(g.type === 'T'){ /* profondeurs déjà dans tRows */ }
+  else if(g.e > 0){
+    geo.push(['Profondeur totale mesurée', fmt(g.P) + ' m', {num:1}], ['Démolition', DEMO_MAT + ', ' + fmtCm(g.e), {num:1}],
+      ['Épaisseur de démolition', 'comprise dans la profondeur totale'], ['Profondeur fouille / totale', fmt(g.Pf) + ' m / ' + fmt(g.Ptot) + ' m', {num:1}]);
+  } else {
+    geo.push(['Profondeur', fmt(g.Ptot) + ' m', {num:1}], ['Démolition', 'Aucune']);
+  }
+  vol.push(['Emprise', fmt(g.area) + ' m²', {num:1}]);
+  if(g.e > 0) vol.push(['Volume démolition', fmt(g.Vd, 3) + ' m³', {num:1}], ['Volume fouille', fmt(g.Vf, 3) + ' m³', {num:1}]);
+  if(g.type === 'T') tVolRows(g).forEach(function(r){ vol.push([r[0], r[1], {num:1}]); });
+  vol.push(['Volume total en place', fmt(g.Vt, 3) + ' m³', {num:1, total:1}]);
+  return {geo:geo, vol:vol};
+}
+function buildPdfPages(progress){
+  var list = doneList();
+  if(!list.length) return Promise.reject(new Error('aucune fouille validée'));
+  var c = palette(true);
+  var val = function(id){ return $(id).value.trim(); };
+  var aff = val('affaire'), dte = frDate($('date').value);
+  var doc = new PdfDoc(aff, dte);
+  var multi = list.length > 1;
+  var chantier = [['N° d\'affaire', aff], ['Date du relevé', dte], ['Adresse', val('adresse')], ['Commune', val('commune')],
+    ['Entreprise', val('entreprise')], ['Rédacteur', val('redacteur')], ['Observations', val('obs')]];
+  var notesBase = ['Volumes en place, non foisonnés, calculés à partir des cotes relevées sur le terrain.'];
+  if(multi){
+    doc.newPage('récapitulatif');
+    doc.h2('Chantier'); doc.table(chantier);
+    doc.h2('Fouilles (' + list.length + ')'); doc.recap(list);
+    doc.text(notesBase.concat(['Le détail de chaque fouille (géométrie, vue 3D, plan, coupes, photos) suit ce récapitulatif.']), 15);
+  }
+  var chain = Promise.resolve();
+  list.forEach(function(f, fi){
+    chain = chain.then(function(){
+      if(progress) progress(fi + 1, list.length);
+      var g = f.g, rows = fouilleRows(f), name = fLabel(f), com = fComment(f);
+      var half = (PDF_W - 2*PDF_M - 24) / 2;
+      doc.newPage(multi ? name : (f.name || ''));
+      if(!multi){ doc.h2('Chantier'); doc.table(chantier); }
+      // Géométrie et volumes côte à côte
+      doc.ensure(460);
+      var y0 = doc.pg.y, pg0 = doc.pg, xr = PDF_M + half + 24, x = pg0.x;
+      x.fillStyle = '#1E2830'; x.font = pFont(24, true, true); x.textAlign = 'left'; x.textBaseline = 'top';
+      x.fillText('Géométrie', PDF_M, y0 + 10);
+      x.fillText('Volumes', xr, y0 + 10);
+      pg0.y = y0 + 46;
+      doc.table(rows.geo, PDF_M, half);
+      var yL = pg0.y;
+      pg0.y = y0 + 46;
+      doc.table(rows.vol, xr, half, 0.55);
+      pg0.y = Math.max(yL, pg0.y);
+      if(com){ doc.table([['Commentaire', com]], PDF_M, null, 0.25); }
+      var cv3 = document.createElement('canvas');
+      cv3.width = 1800; cv3.height = 1100;
+      render3D(cv3.getContext('2d'), 1800, 1100, g, {az:state.az, el:state.el, vex:state.vex, k:2.2, print:true});
+      doc.h2('Vue 3D');
+      doc.image(cv3, PDF_H - PDF_M - doc.pg.y - 20);
+      return Promise.all([svgToImage(planSVG(g, c, 'pp' + f.id), 2)].concat(g.cuts.map(function(ct, i){
+        return svgToImage(coupeSVG(g, ct, c, 'pc' + f.id + '_' + i, 400), 2.5);
+      })));
+    }).then(function(imgs){
+      var g = f.g, name = fLabel(f);
+      doc.newPage((multi ? name + ', ' : '') + 'vues 2D');
+      doc.h2('Vue de dessus');
+      doc.image(imgs[0], 760);
+      doc.h2('Coupes');
+      var cuts = imgs.slice(1), n = cuts.length, gap = 24, cw = n === 1 ? (PDF_W - 2*PDF_M) * 0.55 : (PDF_W - 2*PDF_M - gap*(n - 1)) / n, top = doc.pg.y, maxBottom = top;
+      cuts.forEach(function(im, i){
+        doc.pg.y = top;
+        var x = doc.pg.x;
+        x.fillStyle = '#1E2830'; x.font = pFont(19, true, true); x.textAlign = 'left'; x.textBaseline = 'top';
+        x.fillText(g.cuts[i].title, PDF_M + i*(cw + gap), top);
+        doc.pg.y = top + 30;
+        doc.image(im, 560, PDF_M + i*(cw + gap), cw);
+        maxBottom = Math.max(maxBottom, doc.pg.y);
+      });
+      doc.pg.y = maxBottom + 6;
+      var notes = notesBase.slice();
+      if(state.vex !== 1) notes.push('Vue 3D : exagération verticale ×' + state.vex + ' (affichage uniquement, cotes en valeurs réelles).');
+      notes.push('Vues 2D à l\'échelle, sans exagération.');
+      doc.text(notes, 15);
+      // photos, 2 par page
+      f.photos.forEach(function(p, i){
+        if(i % 2 === 0) doc.newPage((multi ? name + ', ' : '') + 'photos');
+        var pc = document.createElement('canvas'); pc.width = p.w; pc.height = p.h;
+        drawPhoto(pc.getContext('2d'), p, g, false);
+        doc.image(pc, 640);
+        var cap = ['Photo ' + (i + 1) + (p.caption.trim() ? ' : ' + p.caption.trim() : '')];
+        doc.text(cap, 17, '#1E2830');
+        if(p.proj) doc.text(['Forme au sol calée sur les angles placés à la main (quadrillage 0,50 m) ; tige P / démolition réglée à la main (repère visuel).'], 14);
+        doc.pg.y += 14;
+      });
+    });
+  });
+  return chain.then(function(){ return sigImages(); }).then(function(imgs){
+    doc.ensure(420);
+    doc.h2('Signatures');
+    var top = doc.pg.y, gap = 30, w = (PDF_W - 2*PDF_M - gap)/2, x = doc.pg.x;
+    SIG_KEYS.forEach(function(k, i){
+      var x0 = PDF_M + i*(w + gap), y = top, name = $('sig-' + k + '-name').value.trim();
+      x.fillStyle = '#1E2830'; x.textAlign = 'left'; x.textBaseline = 'top';
+      x.font = pFont(20, true, true); x.fillText(SIG_LABEL[k], x0, y);
+      x.font = pFont(18); x.fillText('Nom : ' + (name || '…………………………'), x0, y + 30);
+      var bx = y + 62, bh = 200;
+      x.fillStyle = '#FFFFFF'; x.fillRect(x0, bx, w, bh);
+      x.strokeStyle = '#9AA39A'; x.lineWidth = 1.2; x.strokeRect(x0, bx, w, bh);
+      if(imgs[i]){
+        var s = Math.min((w - 16)/imgs[i].width, (bh - 16)/imgs[i].height);
+        x.drawImage(imgs[i], x0 + (w - imgs[i].width*s)/2, bx + (bh - imgs[i].height*s)/2, imgs[i].width*s, imgs[i].height*s);
+      }
+      x.fillStyle = '#5E6A72'; x.font = pFont(16);
+      x.fillText(sigs[k].at ? sigDateText(sigs[k].at) : 'Date : ……/……/…………', x0, bx + bh + 8);
+    });
+    doc.pg.y = top + 62 + 200 + 40;
+    return doc.pages;
+  });
+}
+function b64ToBytes(b64){
+  var bin = atob(b64), out = new Uint8Array(bin.length);
+  for(var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function bytesToB64(bytes){
+  var s = '', step = 0x8000;
+  for(var i = 0; i < bytes.length; i += step) s += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+  return btoa(s);
+}
+function asciiPdf(s){
+  return String(s).replace(/[–—]/g, '-').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, '').replace(/([\\()])/g, '\\$1');
+}
+function pdfFromPages(pages, title){
+  var chunks = [], len = 0, offsets = [];
+  function add(x){
+    var b = x;
+    if(typeof x === 'string'){ b = new Uint8Array(x.length); for(var i = 0; i < x.length; i++) b[i] = x.charCodeAt(i) & 255; }
+    chunks.push(b); len += b.length;
+  }
+  function obj(num, body){ offsets[num] = len; add(num + ' 0 obj\n' + body + '\nendobj\n'); }
+  var n = pages.length, total = 2 + 3*n + 1;
+  add('%PDF-1.4\n%\u00E2\u00E3\u00CF\u00D3\n');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  var kids = [];
+  for(var i = 0; i < n; i++) kids.push((3 + 3*i) + ' 0 R');
+  obj(2, '<< /Type /Pages /Kids [' + kids.join(' ') + '] /Count ' + n + ' >>');
+  pages.forEach(function(p, i){
+    var pn = 3 + 3*i, cn = pn + 1, im = pn + 2;
+    obj(pn, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /XObject << /Im0 ' + im + ' 0 R >> >> /Contents ' + cn + ' 0 R >>');
+    var content = 'q\n595.28 0 0 841.89 0 0 cm\n/Im0 Do\nQ\n';
+    obj(cn, '<< /Length ' + content.length + ' >>\nstream\n' + content + 'endstream');
+    var jpg = b64ToBytes(p.c.toDataURL('image/jpeg', 0.82).split(',')[1]);
+    offsets[im] = len;
+    add(im + ' 0 obj\n<< /Type /XObject /Subtype /Image /Width ' + p.c.width + ' /Height ' + p.c.height +
+      ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + jpg.length + ' >>\nstream\n');
+    add(jpg);
+    add('\nendstream\nendobj\n');
+  });
+  obj(total, '<< /Producer (Releve de fouille) /Title (' + asciiPdf(title) + ') >>');
+  var xref = len;
+  var x = 'xref\n0 ' + (total + 1) + '\n0000000000 65535 f \n';
+  for(i = 1; i <= total; i++) x += String(offsets[i]).padStart(10, '0') + ' 00000 n \n';
+  add(x + 'trailer\n<< /Size ' + (total + 1) + ' /Root 1 0 R /Info ' + total + ' 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+  var out = new Uint8Array(len), pos = 0;
+  chunks.forEach(function(ch){ out.set(ch, pos); pos += ch.length; });
+  return out;
+}
+
+var lastPdf = null, pdfBusy = false;
+function mailSubject(){
+  var aff = $('affaire').value.trim(), dte = frDate($('date').value);
+  return 'Relevé de fouille' + (aff ? ' – Affaire ' + aff : '') + (dte ? ' – ' + dte : '');
+}
+function mailText(){
+  var list = doneList(), t = {Vd:0, Vf:0, Vt:0};
+  list.forEach(function(f){ t.Vd += f.g.Vd; t.Vf += f.g.Vf; t.Vt += f.g.Vt; });
+  var adr = [$('adresse').value.trim(), $('commune').value.trim()].filter(Boolean).join(', ');
+  return 'Bonjour,\n\nCi-joint le relevé de ' + list.length + (list.length > 1 ? ' fouilles' : ' fouille') + (adr ? ' (' + adr + ')' : '') + '.\n' +
+    'Volume total en place : ' + fmt(t.Vt, 3) + ' m³' + (t.Vd > 0 ? ' (dont démolition ' + fmt(t.Vd, 3) + ' m³)' : '') + '.\n\nCordialement';
+}
+function setPdfMsg(text, bad){
+  var m = $('pdf-msg'); m.textContent = text; m.classList.toggle('bad', !!bad);
+}
+function shareReady(){
+  var b = $('mail-ready');
+  if(!lastPdf){ b.hidden = true; return; }
+  b.hidden = false;
+}
+function webShare(pdf){
+  var file = new File([pdf.bytes], pdf.name, {type:'application/pdf'});
+  return navigator.share({files:[file], title:pdf.subject, text:pdf.text});
+}
+function sendPdf(pdf){
+  if(isApp()){
+    return window.Capacitor.nativePromise('SharePdf', 'share', {base64:bytesToB64(pdf.bytes), filename:pdf.name, subject:pdf.subject, text:pdf.text})
+      .then(function(){ setPdfMsg('Choisis ton appli mail dans la liste, puis le destinataire.'); });
+  }
+  var file = null;
+  try{ file = new File([pdf.bytes], pdf.name, {type:'application/pdf'}); }catch(err){}
+  if(file && navigator.canShare && navigator.canShare({files:[file]})){
+    return webShare(pdf).then(function(){
+      setPdfMsg('PDF transmis à l\'appli choisie.');
+      lastPdf = null; shareReady();
+    }).catch(function(err){
+      if(err && err.name === 'AbortError'){ setPdfMsg('Envoi annulé.'); return; }
+      // délai dépassé entre le clic et le partage : un second appui suffit
+      setPdfMsg('PDF prêt : appuie sur « Envoyer le PDF prêt ».');
+      shareReady();
+    });
+  }
+  // Pas de partage de fichiers (ordinateur…) : téléchargement + mail pré-rempli
+  var url = URL.createObjectURL(new Blob([pdf.bytes], {type:'application/pdf'}));
+  var a = document.createElement('a');
+  a.href = url; a.download = pdf.name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+  setTimeout(function(){
+    location.href = 'mailto:?subject=' + encodeURIComponent(pdf.subject) + '&body=' + encodeURIComponent(pdf.text + '\n\n(PDF à joindre : ' + pdf.name + ')');
+  }, 700);
+  setPdfMsg('PDF téléchargé (' + pdf.name + ') : joins-le au mail qui s\'ouvre.');
+  return Promise.resolve();
+}
+function emailPdf(){
+  if(pdfBusy) return;
+  if(!doneList().length){ setPdfMsg('Aucune fouille validée à envoyer.', true); return; }
+  pdfBusy = true;
+  $('mail').disabled = true;
+  setPdfMsg('Préparation du PDF…');
+  lastPdf = null; shareReady();
+  buildPdfPages(function(i, n){ setPdfMsg('Préparation du PDF… fouille ' + i + '/' + n); }).then(function(pages){
+    var subject = mailSubject();
+    var bytes = pdfFromPages(pages, subject);
+    lastPdf = {bytes:bytes, name:pdfName() + '.pdf', subject:subject, text:mailText()};
+    return sendPdf(lastPdf);
+  }).catch(function(err){
+    setPdfMsg('Création du PDF impossible : ' + ((err && err.message) || err), true);
+  }).then(function(){
+    pdfBusy = false;
+    $('mail').disabled = false;
+  });
+}
+$('mail').addEventListener('click', emailPdf);
+$('mail-ready').addEventListener('click', function(){
+  if(!lastPdf) return;
+  webShare(lastPdf).then(function(){ setPdfMsg('PDF transmis à l\'appli choisie.'); lastPdf = null; shareReady(); })
+    .catch(function(err){ if(!(err && err.name === 'AbortError')) setPdfMsg('Partage impossible : ' + ((err && err.message) || err), true); });
+});
+
+/* ================= Mesure caméra dans Chrome (WebXR, sans l'APK) ================= */
+// Même principe que le module de l'APK : réticule au centre, 2 points, distance.
+// Ne s'active que si Chrome confirme la réalité augmentée (téléphone compatible ARCore).
+var XR_TIPS = [
+  'Lumière : de jour ou zone bien éclairée, sans contre-jour. Éviter flaques et surfaces brillantes.',
+  'Démarrage : balayer lentement le sol autour de la fouille pendant 5 à 10 secondes, en faisant un ou deux pas, jusqu\'à ce que le réticule devienne jaune.',
+  'Position : debout, téléphone pointé vers le sol, à 1 ou 2 m des points.',
+  'Visée : viser les angles de la fouille au niveau du sol (bord de la surface), pas dans le trou.',
+  'Pose du point : s\'immobiliser une seconde, réticule jaune, puis « Ajouter un point ».',
+  'Entre deux points : se déplacer lentement en gardant la caméra dégagée (doigts, ombre).'
+];
+var xr = null; // état de la session en cours
+function xrBrowserHint(){
+  var ua = navigator.userAgent || '', h = '';
+  if(/EdgA\//.test(ua)) h += '. Navigateur utilisé : Microsoft Edge. Ouvre le fichier avec Google Chrome';
+  else if(/SamsungBrowser\//.test(ua)) h += '. Navigateur utilisé : Samsung Internet. Ouvre le fichier avec Google Chrome';
+  else if(/Firefox\//.test(ua)) h += '. Navigateur utilisé : Firefox. Ouvre le fichier avec Google Chrome';
+  if(!(location.protocol === 'https:' || /^(localhost|127\.0\.0\.1)$/.test(location.hostname))) {
+    h += '. Page ouverte depuis un fichier, pas par un lien https : la réalité augmentée peut l\'exiger';
+  }
+  return h + '.';
+}
+function webXrSupported(){
+  if(isApp() || !navigator.xr || !navigator.xr.isSessionSupported) return Promise.resolve(false);
+  return navigator.xr.isSessionSupported('immersive-ar').catch(function(){ return false; });
+}
+function xrEl(){
+  var root = $('xr-ui');
+  if(root) return root;
+  root = document.createElement('div');
+  root.id = 'xr-ui';
+  root.innerHTML =
+    '<canvas id="xr-draw"></canvas>' +
+    '<div class="xr-top"><div class="xr-title" id="xr-title"></div><div id="xr-msg">Démarrage de la caméra…</div>' +
+      '<div class="xr-credit">Mesure approximative, via Google Play Services for AR (ARCore).</div>' +
+      '<button type="button" class="xr-link" id="xr-tips-open">Conseils de mesure ›</button></div>' +
+    '<div class="xr-bottom"><div class="xr-result" id="xr-result">–</div>' +
+      '<button type="button" class="xr-main" id="xr-add">+  Ajouter un point</button>' +
+      '<div class="xr-row"><button type="button" id="xr-close">Fermer</button><button type="button" id="xr-undo">Retirer</button>' +
+      '<button type="button" id="xr-ok" class="xr-ok" disabled>Valider</button></div></div>' +
+    '<div class="xr-tips" id="xr-tips"><div class="xr-tips-box"><h3>Pour une bonne mesure</h3><ul>' +
+      XR_TIPS.map(function(t){ return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' +
+      '<label class="xr-hide"><input type="checkbox" id="xr-tips-hide"> Ne plus afficher au démarrage</label>' +
+      '<button type="button" class="xr-main" id="xr-tips-go">Commencer</button></div></div>';
+  document.body.appendChild(root);
+  return root;
+}
+function xrDist(a, b){ var dx = a[0]-b[0], dy = a[1]-b[1], dz = a[2]-b[2]; return Math.sqrt(dx*dx + dy*dy + dz*dz); }
+function xrProject(view, p, w, h){
+  var m = view.transform.inverse.matrix, P = view.projectionMatrix;
+  var v = [0,0,0,0], c = [0,0,0,0], i;
+  for(i = 0; i < 4; i++) v[i] = m[i]*p[0] + m[4+i]*p[1] + m[8+i]*p[2] + m[12+i];
+  for(i = 0; i < 4; i++) c[i] = P[i]*v[0] + P[4+i]*v[1] + P[8+i]*v[2] + P[12+i]*v[3];
+  if(c[3] <= 1e-4) return null;
+  return [(c[0]/c[3] + 1)/2 * w, (1 - c[1]/c[3])/2 * h];
+}
+function startWebXrMeasure(label){
+  return new Promise(function(resolve, reject){
+    var root = xrEl();
+    $('xr-title').textContent = 'Mesure : ' + label;
+    $('xr-result').textContent = '–';
+    var st = {pts:[], recent:[], add:false, undo:false, frozen:-1, done:false, anchors:false, hitPos:null, session:null, value:0, frames:0, userClosed:false, error:null, t0:Date.now()};
+    xr = st;
+    var tips = $('xr-tips'), hideTips = false;
+    try{ hideTips = localStorage.getItem('xrHideTips') === '1'; }catch(err){}
+    $('xr-tips-hide').checked = hideTips;
+    tips.hidden = hideTips;
+    $('xr-tips-open').onclick = function(){ tips.hidden = false; };
+    $('xr-tips-go').onclick = function(){
+      try{ localStorage.setItem('xrHideTips', $('xr-tips-hide').checked ? '1' : '0'); }catch(err){}
+      tips.hidden = true;
+    };
+    $('xr-add').onclick = function(){ st.add = true; };
+    $('xr-undo').onclick = function(){ st.undo = true; };
+    $('xr-close').onclick = function(){ st.userClosed = true; if(st.session) st.session.end(); };
+    $('xr-ok').onclick = function(){ if(st.frozen > 0){ st.done = true; st.value = st.frozen; st.session.end(); } };
+    root.classList.add('on');
+
+    var canvas = document.createElement('canvas');
+    var gl = canvas.getContext('webgl', {xrCompatible:true, alpha:true});
+    navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures:['hit-test', 'dom-overlay'], optionalFeatures:['anchors'], domOverlay:{root:root}
+    }).then(function(session){
+      st.session = session;
+      st.anchors = typeof XRFrame !== 'undefined' && 'createAnchor' in XRFrame.prototype;
+      session.updateRenderState({baseLayer:new XRWebGLLayer(session, gl)});
+      session.addEventListener('end', function(){
+        root.classList.remove('on');
+        xr = null;
+        st.pts.forEach(function(p){ if(p.anchor && p.anchor.delete) p.anchor.delete(); });
+        if(st.done){ resolve({cancelled:false, value:st.value}); return; }
+        if(st.userClosed){ resolve({cancelled:true}); return; }
+        var why;
+        if(st.error) why = 'erreur pendant la mesure (' + st.error + ')';
+        else if(!st.frames) why = 'le navigateur a fermé la caméra avant la première image (' + (Date.now() - st.t0) + ' ms)'
+          + xrBrowserHint();
+        else why = 'la caméra a été fermée par Chrome ou le système après ' + st.frames + ' images';
+        resolve({cancelled:true, error:why});
+      });
+      return Promise.all([session.requestReferenceSpace('local'), session.requestReferenceSpace('viewer')]).then(function(sp){
+        st.ref = sp[0];
+        return session.requestHitTestSource({space:sp[1]});
+      }).catch(function(err){
+        st.error = 'préparation : ' + ((err && err.message) || err);
+        session.end();
+        throw err;
+      }).then(function(src){
+        st.hitSource = src;
+        session.requestAnimationFrame(function onFrame(t, frame){
+          st.frames++;
+          try{ xrFrame(st, session, gl, frame); }
+          catch(err){ st.error = (err && err.message) || String(err); session.end(); return; }
+          session.requestAnimationFrame(onFrame);
+        });
+      });
+    }).catch(function(err){
+      if(st.session) return; // déjà traité par l'événement « end »
+      root.classList.remove('on');
+      xr = null;
+      reject(new Error('le navigateur refuse d\'ouvrir la réalité augmentée : ' + ((err && err.name) ? err.name + ' – ' : '') + ((err && err.message) || err)
+        + xrBrowserHint()));
+    });
+  });
+}
+function xrMsg(st, text, result){
+  if(st.lastMsg !== text){ $('xr-msg').textContent = text; st.lastMsg = text; }
+  if(result != null && st.lastRes !== result){ $('xr-result').textContent = result; st.lastRes = result; }
+}
+function xrFrame(st, session, gl, frame){
+  gl.bindFramebuffer(gl.FRAMEBUFFER, session.renderState.baseLayer.framebuffer);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  var cv = $('xr-draw'), W = cv.clientWidth, H = cv.clientHeight, dpr = window.devicePixelRatio || 1;
+  if(cv.width !== Math.round(W*dpr)){ cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr); }
+  var ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  var pose = frame.getViewerPose(st.ref);
+  if(!pose){ xrMsg(st, 'Balayez lentement la zone avec le téléphone pour démarrer la détection.'); return; }
+  var view = pose.views[0], cam = pose.transform.position;
+
+  // point visé, lissé sur les dernières images
+  var hits = st.hitSource ? frame.getHitTestResults(st.hitSource) : [];
+  var mean = null;
+  if(hits.length){
+    var hp = hits[0].getPose(st.ref).transform.position, cur = [hp.x, hp.y, hp.z];
+    if(st.recent.length && xrDist(st.recent[st.recent.length - 1], cur) > 0.25) st.recent = [];
+    st.recent.push(cur);
+    if(st.recent.length > 10) st.recent.shift();
+    mean = [0, 0, 0];
+    st.recent.forEach(function(q){ mean[0] += q[0]/st.recent.length; mean[1] += q[1]/st.recent.length; mean[2] += q[2]/st.recent.length; });
+  } else st.recent = [];
+
+  if(st.undo){ st.undo = false; var r = st.pts.pop(); if(r && r.anchor && r.anchor.delete) r.anchor.delete(); st.frozen = -1; }
+  if(st.add){
+    st.add = false;
+    if(mean){
+      if(st.pts.length >= 2){ st.pts.forEach(function(p){ if(p.anchor && p.anchor.delete) p.anchor.delete(); }); st.pts = []; st.frozen = -1; }
+      var pt = {pos:mean.slice(), anchor:null};
+      st.pts.push(pt);
+      if(st.anchors){
+        try{
+          frame.createAnchor(new XRRigidTransform({x:mean[0], y:mean[1], z:mean[2]}), st.ref).then(function(a){ pt.anchor = a; }).catch(function(){});
+        }catch(err){}
+      }
+      st.recent = [];
+    } else {
+      st.notice = 'Aucune surface visée : balayez le sol lentement.';
+      st.noticeUntil = Date.now() + 2500;
+    }
+  }
+  // position des points (recalée par les ancres si disponibles)
+  st.pts.forEach(function(p){
+    if(p.anchor && frame.trackedAnchors && frame.trackedAnchors.has(p.anchor)){
+      var ap = frame.getPose(p.anchor.anchorSpace, st.ref);
+      if(ap) p.pos = [ap.transform.position.x, ap.transform.position.y, ap.transform.position.z];
+    }
+  });
+
+  var result = null, end = null;
+  if(st.pts.length === 2 && st.frozen < 0){ st.frozen = xrDist(st.pts[0].pos, st.pts[1].pos); }
+  if(st.pts.length === 2){
+    var a = st.pts[0].pos, b = st.pts[1].pos, hz = Math.hypot(b[0]-a[0], b[2]-a[2]);
+    result = fmt(st.frozen) + ' m   (horiz. ' + fmt(hz) + ' m)';
+  } else if(st.pts.length === 1 && mean){
+    end = mean;
+    result = fmt(xrDist(st.pts[0].pos, mean)) + ' m';
+  }
+  $('xr-ok').disabled = !(st.pts.length === 2);
+
+  // dessin : segment, points, réticule
+  var yel = '#F2B705';
+  var sp = st.pts.map(function(p){ return xrProject(view, p.pos, W, H); });
+  var endS = end ? xrProject(view, end, W, H) : (sp.length === 2 ? sp[1] : null);
+  if(sp[0] && endS){
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.moveTo(sp[0][0], sp[0][1]); ctx.lineTo(endS[0], endS[1]); ctx.stroke();
+    ctx.strokeStyle = yel; ctx.lineWidth = 3.5; ctx.stroke();
+  }
+  sp.forEach(function(q){
+    if(!q) return;
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(q[0], q[1], 8, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = yel; ctx.beginPath(); ctx.arc(q[0], q[1], 6, 0, Math.PI*2); ctx.fill();
+  });
+  if(st.pts.length < 2){
+    var col = mean ? yel : 'rgba(255,255,255,.8)';
+    ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.arc(W/2, H/2, 18, 0, Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(W/2, H/2, 3, 0, Math.PI*2); ctx.fill();
+  }
+
+  var range = mean ? xrDist([cam.x, cam.y, cam.z], mean) : 0;
+  var msg;
+  if(st.notice && Date.now() < st.noticeUntil) msg = st.notice;
+  else if(!mean && !st.pts.length) msg = 'Balayez lentement le sol autour de la fouille (5 à 10 s, un ou deux pas) jusqu\'à ce que le réticule devienne jaune.';
+  else if(!mean) msg = 'Visez une surface (sol, bord de fouille).';
+  else if(!st.pts.length) msg = 'Visez le 1er point puis appuyez sur « Ajouter un point ».';
+  else if(st.pts.length === 1) msg = 'Visez le 2e point puis appuyez sur « Ajouter un point ».';
+  else msg = 'Mesure terminée : « Valider » pour la reporter, ou « Ajouter un point » pour recommencer.';
+  if(mean && st.pts.length < 2){
+    msg += '\nDistance au point visé : ' + fmt(range, 1) + ' m' + (range > 3 ? ' – trop loin, rapprochez-vous (1 à 2 m).' : '');
+  }
+  xrMsg(st, msg, result == null ? (st.pts.length ? null : '–') : result);
+}
+
+/* ================= Mesure à la caméra (module natif ARCore) ================= */
+function arError(text){
+  $('ar-hint').hidden = false;
+  $('ar-hint').textContent = text;
+  $('input-errs').innerHTML = '<ul class="errs"><li>' + esc(text) + '</li></ul>';
+  try{ window.alert(text); }catch(err){}
+}
+function showArButtons(ok){
+  document.querySelectorAll('.ar-btn').forEach(function(b){ b.hidden = !ok; });
+  $('ar-hint').hidden = !ok;
+}
+function initAr(){
+  if(!isApp()){
+    webXrSupported().then(showArButtons);
+    return;
+  }
+  var tries = 0;
+  (function check(){
+    window.Capacitor.nativePromise('ArMeasure', 'availability', {}).then(function(r){
+      if(r && r.transient && tries++ < 8){ setTimeout(check, 500); return; }
+      showArButtons(!!(r && r.supported));
+    }).catch(function(){});
+  })();
+}
+document.querySelectorAll('.ar-btn').forEach(function(b){
+  b.addEventListener('click', function(){
+    var input = $(b.dataset.target);
+    var label = b.closest('.cart').querySelector('label').textContent;
+    var measure = isApp()
+      ? window.Capacitor.nativePromise('ArMeasure', 'measure', {mode:b.dataset.mode, title:label})
+      : startWebXrMeasure(label);
+    measure.then(function(r){
+      if(!r || r.cancelled){
+        if(r && r.error){ arError('Mesure annulée : ' + r.error); }
+        return;
+      }
+      if(!(r.value > 0)) return;
+      input.value = fmt(r.value, 2).replace(/\s/g, '');
+      input.dispatchEvent(new Event('input', {bubbles:true}));
+      $('ar-hint').textContent = label + ' mesurée à la caméra : ' + fmt(r.value, 2) + ' m'
+        + (b.dataset.mode === 'vertical' ? ' (écart vertical)' : '') + '. Valeur approximative, à vérifier au mètre.';
+    }).catch(function(err){
+      arError('Mesure impossible : ' + ((err && err.message) || err));
+    });
+  });
+});
+initAr();
+
+/* ================= Signatures ================= */
+var SIG_KEYS = ['ca', 'pr'];
+var SIG_LABEL = {ca:'Chargé d\'affaires', pr:'Prestataire'};
+var sigs = {ca:{img:'', at:0}, pr:{img:'', at:0}};
+function sigDateText(t){
+  if(!t) return 'Non signé';
+  var d = new Date(t);
+  return 'Signé le ' + String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear()
+    + ' à ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+function sigPaint(key){
+  var cv = $('sig-' + key + '-pad'), ctx = cv.getContext('2d');
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, cv.width, cv.height);
+  $('sig-' + key + '-date').textContent = sigDateText(sigs[key].at);
+  if(!sigs[key].img) return;
+  var im = new Image();
+  im.onload = function(){
+    var s = Math.min(cv.width/im.width, cv.height/im.height);
+    ctx.drawImage(im, (cv.width - im.width*s)/2, (cv.height - im.height*s)/2, im.width*s, im.height*s);
+  };
+  im.src = sigs[key].img;
+}
+function sigSize(key){
+  var cv = $('sig-' + key + '-pad'), r = cv.getBoundingClientRect();
+  if(!r.width) return;
+  var dpr = window.devicePixelRatio || 1, W = Math.round(r.width*dpr), H = Math.round(r.height*dpr);
+  if(cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; sigPaint(key); }
+}
+function renderSigs(){ SIG_KEYS.forEach(function(k){ sigSize(k); sigPaint(k); }); }
+SIG_KEYS.forEach(function(key){
+  var cv = $('sig-' + key + '-pad'), drawing = false, last = null;
+  function pos(ev){
+    var r = cv.getBoundingClientRect();
+    return [(ev.clientX - r.left) * cv.width / r.width, (ev.clientY - r.top) * cv.height / r.height];
+  }
+  function line(a, b){
+    var ctx = cv.getContext('2d'), dpr = window.devicePixelRatio || 1;
+    ctx.strokeStyle = '#1E2830'; ctx.lineWidth = 2.4*dpr; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  }
+  cv.addEventListener('pointerdown', function(ev){
+    ev.preventDefault();
+    sigSize(key);
+    drawing = true; last = pos(ev);
+    line(last, [last[0] + 0.1, last[1] + 0.1]);
+    try{ cv.setPointerCapture(ev.pointerId); }catch(err){}
+  });
+  cv.addEventListener('pointermove', function(ev){
+    if(!drawing) return;
+    var p = pos(ev); line(last, p); last = p;
+  });
+  function end(){
+    if(!drawing) return;
+    drawing = false;
+    sigs[key].img = cv.toDataURL('image/png');
+    sigs[key].at = Date.now();
+    $('sig-' + key + '-date').textContent = sigDateText(sigs[key].at);
+    scheduleSave();
+  }
+  cv.addEventListener('pointerup', end);
+  cv.addEventListener('pointercancel', end);
+});
+document.querySelectorAll('[data-sigclear]').forEach(function(b){
+  b.addEventListener('click', function(){
+    var k = b.dataset.sigclear;
+    sigs[k] = {img:'', at:0};
+    sigPaint(k);
+  });
+});
+if(window.ResizeObserver) new ResizeObserver(function(){ if(state.step === 'result') SIG_KEYS.forEach(sigSize); }).observe($('sig-ca-pad'));
+function sigHTML(){
+  return '<div class="r-sigs"><h2>Signatures</h2><div class="r-sig-grid">' + SIG_KEYS.map(function(k){
+    var name = $('sig-' + k + '-name').value.trim();
+    return '<div><div class="r-sig-t">' + SIG_LABEL[k] + '</div><div class="r-sig-n">Nom : ' + (name ? esc(name) : '…………………………') + '</div>'
+      + '<div class="r-sig-box">' + (sigs[k].img ? '<img alt="Signature ' + SIG_LABEL[k] + '" src="' + sigs[k].img + '">' : '') + '</div>'
+      + '<div class="r-sig-d">' + (sigs[k].at ? sigDateText(sigs[k].at) : 'Date : ……/……/…………') + '</div></div>';
+  }).join('') + '</div></div>';
+}
+function sigImages(){
+  return Promise.all(SIG_KEYS.map(function(k){
+    return new Promise(function(res){
+      if(!sigs[k].img){ res(null); return; }
+      var im = new Image(); im.onload = function(){ res(im); }; im.onerror = function(){ res(null); }; im.src = sigs[k].img;
+    });
+  }));
+}
+
+/* ================= Sauvegarde automatique (IndexedDB) ================= */
+// Tout est enregistré sur l'appareil : cotes (même non validées), infos chantier, photos et calages.
+// Au lancement, le dernier relevé est rechargé automatiquement.
+var DB_NAME = 'releve-fouille', DB_VER = 1, dbPromise = null;
+var CHANTIER = ['affaire','date','adresse','commune','entreprise','redacteur','obs','sig-ca-name','sig-pr-name'];
+var saveTimer = null, restoring = true, saveFailed = false;
+function openDB(){
+  if(dbPromise) return dbPromise;
+  dbPromise = new Promise(function(resolve, reject){
+    if(!window.indexedDB){ reject(new Error('stockage indisponible')); return; }
+    var rq;
+    try{ rq = indexedDB.open(DB_NAME, DB_VER); }catch(err){ reject(err); return; }
+    rq.onupgradeneeded = function(){
+      var db = rq.result;
+      if(!db.objectStoreNames.contains('state')) db.createObjectStore('state');
+      if(!db.objectStoreNames.contains('photos')) db.createObjectStore('photos', {keyPath:'id'});
+    };
+    rq.onsuccess = function(){ resolve(rq.result); };
+    rq.onerror = function(){ reject(rq.error || new Error('ouverture impossible')); };
+  });
+  return dbPromise;
+}
+function idb(storeName, mode, fn){
+  return openDB().then(function(db){
+    return new Promise(function(resolve, reject){
+      var tx = db.transaction(storeName, mode), out;
+      var r = fn(tx.objectStore(storeName));
+      if(r) r.onsuccess = function(){ out = r.result; };
+      tx.oncomplete = function(){ resolve(out); };
+      tx.onerror = tx.onabort = function(){ reject(tx.error || new Error('écriture impossible')); };
+    });
+  });
+}
+function hhmm(t){
+  var d = new Date(t);
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0');
+}
+function setSaveStatus(txt, kind){
+  var el = $('save-status');
+  el.textContent = txt;
+  el.classList.toggle('pending', kind === 'pending');
+  el.classList.toggle('bad', kind === 'bad');
+}
+function readFields(){
+  var vals = {};
+  FIELDS.forEach(function(id){ vals[id] = $(id).value; });
+  return {type:state.type, vals:vals};
+}
+function snapshot(){
+  if(state.step === 'input' && F()) F().draft = readFields();
+  var chantier = {};
+  CHANTIER.forEach(function(id){ chantier[id] = $(id).value; });
+  return {
+    v:1, savedAt:Date.now(), cur:cur, step:state.step,
+    view:{az:state.az, el:state.el, vex:state.vex},
+    sigs:{ca:{img:sigs.ca.img, at:sigs.ca.at}, pr:{img:sigs.pr.img, at:sigs.pr.at}},
+    chantier:chantier,
+    fouilles: fouilles.map(function(f){
+      return {
+        id:f.id, name:f.name, type:f.type, vals:f.vals, validated:!!f.g, draft:f.draft || null,
+        photos: f.photos.map(function(p){
+          return {id:p.id, w:p.w, h:p.h, caption:p.caption, proj:p.proj, pts:p.pts, rod:p.rod, alpha:p.alpha, rodBranch:p.rodBranch || 'A'};
+        })
+      };
+    })
+  };
+}
+function saveFail(err){
+  saveFailed = true;
+  setSaveStatus('Sauvegarde impossible : ' + ((err && err.message) || err) + '. Exporter le PDF par sécurité.', 'bad');
+}
+function savePhoto(p){
+  return idb('photos', 'readwrite', function(st){ return st.put({id:p.id, data:p.data}); }).catch(saveFail);
+}
+function saveNow(){
+  if(restoring) return Promise.resolve();
+  clearTimeout(saveTimer); saveTimer = null;
+  var snap;
+  try{ snap = snapshot(); }catch(err){ saveFail(err); return Promise.resolve(); }
+  return idb('state', 'readwrite', function(st){ return st.put(snap, 'current'); })
+    .then(function(){ return idb('photos', 'readonly', function(st){ return st.getAllKeys(); }); })
+    .then(function(keys){
+      // photos encore utilisées au moment du nettoyage (évite d'effacer une photo tout juste ajoutée)
+      var ids = [];
+      fouilles.forEach(function(f){ f.photos.forEach(function(p){ ids.push(p.id); }); });
+      var stale = (keys || []).filter(function(k){ return ids.indexOf(k) < 0; });
+      if(!stale.length) return;
+      return idb('photos', 'readwrite', function(st){ stale.forEach(function(k){ st.delete(k); }); });
+    })
+    .then(function(){ saveFailed = false; setSaveStatus('Enregistré à ' + hhmm(snap.savedAt)); })
+    .catch(saveFail);
+}
+function scheduleSave(){
+  if(restoring) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 600);
+  if(!saveFailed) setSaveStatus('Enregistrement…', 'pending');
+}
+function applyDraft(d){
+  FIELDS.forEach(function(id){ $(id).value = (d.vals && d.vals[id]) || ''; });
+  state.type = d.type || 'rect';
+  syncInput();
+}
+function restore(){
+  return idb('state', 'readonly', function(st){ return st.get('current'); }).then(function(snap){
+    if(!snap || snap.v !== 1 || !snap.fouilles || !snap.fouilles.length) return null;
+    return idb('photos', 'readonly', function(st){ return st.getAll(); }).then(function(rows){
+      var data = {};
+      (rows || []).forEach(function(r){ data[r.id] = r.data; });
+      CHANTIER.forEach(function(id){ if(snap.chantier && snap.chantier[id] != null) $(id).value = snap.chantier[id]; });
+      if(snap.sigs){
+        SIG_KEYS.forEach(function(k){ if(snap.sigs[k]) sigs[k] = {img:snap.sigs[k].img || '', at:snap.sigs[k].at || 0}; });
+      }
+      if(snap.view){
+        state.az = snap.view.az; state.el = snap.view.el; state.vex = snap.view.vex || 1;
+        $('vex').value = String(state.vex);
+      }
+      var loads = [];
+      fouilles = snap.fouilles.map(function(sf){
+        fSeq = Math.max(fSeq, sf.id);
+        var f = {id:sf.id, name:sf.name || '', type:sf.type || 'rect', mode:'incl', vals:sf.vals || {}, g:null, photos:[], draft:sf.draft || null};
+        (sf.photos || []).forEach(function(sp){
+          if(!data[sp.id]) return;
+          phSeq = Math.max(phSeq, sp.id);
+          var p = {id:sp.id, img:new Image(), w:sp.w, h:sp.h, data:data[sp.id], caption:sp.caption || '', proj:!!sp.proj,
+                   edit:false, pts:sp.pts || null, rod:sp.rod || null, alpha:sp.alpha || 0.4, drag:-1, rodBranch:sp.rodBranch || 'A'};
+          if(p.proj && (!p.pts || !p.rod)) p.proj = false;
+          loads.push(new Promise(function(r){ p.img.onload = r; p.img.onerror = r; }));
+          p.img.src = p.data;
+          f.photos.push(p);
+        });
+        return f;
+      });
+      // recalcul des fouilles validées à partir de leurs cotes
+      snap.fouilles.forEach(function(sf, i){
+        if(!sf.validated) return;
+        cur = i;
+        loadInputs(fouilles[i]);
+        var g = compute();
+        fouilles[i].g = g.errs ? null : g;
+      });
+      cur = clamp(snap.cur | 0, 0, fouilles.length - 1);
+      return Promise.all(loads).then(function(){ return snap; });
+    });
+  });
+}
+function startFresh(){
+  fouilles = [newFouille()];
+  cur = 0;
+  current = null;
+  loadInputs(F());
+  showStep('input');
+}
+
+$('new-releve').addEventListener('click', function(){
+  if(!window.confirm('Commencer un nouveau relevé ? Le relevé en cours (cotes, photos, infos chantier) sera effacé de l\'appareil.')) return;
+  clearTimeout(saveTimer); saveTimer = null;
+  restoring = true;
+  var clear = Promise.all([
+    idb('state', 'readwrite', function(st){ st.clear(); }),
+    idb('photos', 'readwrite', function(st){ st.clear(); })
+  ]);
+  clear.catch(function(){}).then(function(){ location.reload(); });
+});
+['input', 'change', 'click', 'pointerup'].forEach(function(t){ document.addEventListener(t, scheduleSave, true); });
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'hidden' && saveTimer) saveNow(); });
+window.addEventListener('pagehide', function(){ if(saveTimer) saveNow(); });
+if(navigator.storage && navigator.storage.persist){ try{ navigator.storage.persist().catch(function(){}); }catch(err){} }
+
+startFresh();
+restore().then(function(snap){
+  if(!snap) { setSaveStatus('Sauvegarde automatique active'); return; }
+  var f = F();
+  if(snap.step === 'result' && f.g){
+    loadInputs(f);
+    current = f.g;
+    try{ history.pushState({step:'result'}, ''); }catch(err){}
+    showStep('result');
+  } else {
+    loadInputs(f);
+    if(f.draft) applyDraft(f.draft);
+    current = f.g;
+    showStep('input');
+  }
+  var d = new Date(snap.savedAt);
+  setSaveStatus('Relevé restauré (enregistré le ' + String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + ' à ' + hhmm(snap.savedAt).slice(0,5) + ')');
+}).catch(function(err){
+  saveFailed = true;
+  setSaveStatus('Sauvegarde automatique indisponible sur cet appareil', 'bad');
+  startFresh();
+}).then(function(){ restoring = false; });
+})();
+</script>
+</body>
+</html>
