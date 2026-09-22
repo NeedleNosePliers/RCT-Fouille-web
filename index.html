@@ -383,7 +383,7 @@ details.panel[open] summary{margin-bottom:12px}
 <script>
 (function(){
 'use strict';
-var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '1.8';
+var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '1.9';
 var APP_LABEL = APP_NAME + ' Ver.' + APP_VERSION;
 var TECH = 'Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif';
 var BODY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -2336,6 +2336,25 @@ function xrFrame(st, session, gl, frame){
     ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 7;
     ctx.beginPath(); ctx.moveTo(sp[0][0], sp[0][1]); ctx.lineTo(endS[0], endS[1]); ctx.stroke();
     ctx.strokeStyle = yel; ctx.lineWidth = 3.5; ctx.stroke();
+    // longueur écrite sur le fil, au milieu, légèrement au-dessus
+    var len = st.pts.length === 2 ? st.frozen : (mean ? xrDist(st.pts[0].pos, mean) : null);
+    if(len != null && len > 0){
+      var txt = fmt(len) + ' m';
+      var mx = (sp[0][0] + endS[0])/2, my = (sp[0][1] + endS[1])/2;
+      var dx = endS[0] - sp[0][0], dy = endS[1] - sp[0][1], dl = Math.hypot(dx, dy) || 1;
+      var nx = -dy/dl, ny = dx/dl;
+      if(ny > 0){ nx = -nx; ny = -ny; } // toujours du côté « haut » de l'écran
+      ctx.font = '600 18px ' + TECH;
+      var tw = ctx.measureText(txt).width, bw = tw + 16, bh = 28;
+      var bx = Math.min(Math.max(mx + nx*22 - bw/2, 4), W - bw - 4), by = Math.min(Math.max(my + ny*22 - bh/2, 4), H - bh - 4);
+      ctx.fillStyle = 'rgba(30,40,48,0.88)';
+      ctx.beginPath();
+      if(ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 6); else ctx.rect(bx, by, bw, bh);
+      ctx.fill();
+      ctx.strokeStyle = yel; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = yel; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(txt, bx + bw/2, by + bh/2 + 1);
+    }
   }
   sp.forEach(function(q){
     if(!q) return;
