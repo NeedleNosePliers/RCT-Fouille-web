@@ -29,6 +29,7 @@ header.top p{margin:0;color:var(--muted);font-size:.95rem}
 #save-status.pending::before{background:var(--tape)}
 #save-status.bad{color:var(--err)}
 #save-status.bad::before{background:var(--err)}
+#import-file{position:absolute;width:1px;height:1px;opacity:0}
 .narrow{max-width:620px;margin:0 auto;display:grid;gap:14px}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 14px 16px}
 .panel h2{font:600 1.15rem/1.2 var(--tech);margin:0 0 12px}
@@ -221,6 +222,9 @@ details.panel[open] summary{margin-bottom:12px}
     <p>Cotes terrain → volumes, 3D, plan, coupes, photos et PDF. <span class="app-ver" id="app-ver"></span></p>
     <div class="savebar">
       <span id="save-status" role="status">Sauvegarde automatique active</span>
+      <button type="button" class="btn" id="export-file">Exporter le relevé</button>
+      <label class="btn" for="import-file" id="import-lbl">Importer un relevé</label>
+      <input type="file" id="import-file" accept=".json,application/json">
       <button type="button" class="btn" id="new-releve">Nouveau relevé</button>
     </div>
   </header>
@@ -383,7 +387,7 @@ details.panel[open] summary{margin-bottom:12px}
 <script>
 (function(){
 'use strict';
-var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '1.9';
+var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '2.0';
 var APP_LABEL = APP_NAME + ' Ver.' + APP_VERSION;
 var TECH = 'Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif';
 var BODY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -2430,6 +2434,87 @@ document.querySelectorAll('.ar-btn').forEach(function(b){
   });
 });
 initAr();
+
+/* ================= Transfert du relevé (export / import) ================= */
+// Un fichier .json contient tout le relevé : cotes, infos chantier, commentaires,
+// photos (avec leur calage), signatures. Il se rouvre sur un autre appareil.
+function releveFileName(){
+  var aff = $('affaire').value.trim().replace(/[^\w\-]+/g, '_');
+  return 'RCT-Fouille' + (aff ? '_' + aff : '') + '_' + ($('date').value || '') + '.json';
+}
+function buildReleveFile(){
+  var snap = snapshot();
+  var photos = [];
+  fouilles.forEach(function(f){ f.photos.forEach(function(p){ photos.push({id:p.id, data:p.data}); }); });
+  return JSON.stringify({app:APP_NAME, version:APP_VERSION, exportedAt:Date.now(), state:snap, photos:photos});
+}
+function exportReleve(){
+  var msg = $('save-status');
+  if(!doneList().length && !fouilles.some(function(f){ return f.vals && f.vals['in-a']; })){
+    setSaveStatus('Rien à exporter pour l\'instant.', 'bad');
+    return;
+  }
+  var text, name = releveFileName();
+  try{ text = buildReleveFile(); }catch(err){ setSaveStatus('Export impossible : ' + ((err && err.message) || err), 'bad'); return; }
+  var blob = new Blob([text], {type:'application/json'});
+  var file = null;
+  try{ file = new File([blob], name, {type:'application/json'}); }catch(err){}
+  if(isApp() && window.Capacitor.nativePromise){
+    var reader = new FileReader();
+    reader.onload = function(){
+      window.Capacitor.nativePromise('SharePdf', 'share', {
+        base64:String(reader.result).split(',')[1], filename:name, mime:'application/json',
+        subject:'Relevé de fouille (fichier modifiable)', text:'Ci-joint le relevé au format RCT-Fouille, à rouvrir avec « Importer un relevé ».'
+      }).then(function(){ setSaveStatus('Fichier du relevé transmis à l\'appli choisie.'); })
+        .catch(function(err){ setSaveStatus('Export impossible : ' + ((err && err.message) || err), 'bad'); });
+    };
+    reader.readAsDataURL(blob);
+    return;
+  }
+  if(file && navigator.canShare && navigator.canShare({files:[file]})){
+    navigator.share({files:[file], title:'Relevé de fouille', text:'Fichier du relevé, à rouvrir avec « Importer un relevé ».'})
+      .then(function(){ setSaveStatus('Fichier du relevé transmis à l\'appli choisie.'); })
+      .catch(function(err){
+        if(err && err.name === 'AbortError'){ setSaveStatus('Export annulé.'); return; }
+        downloadReleve(blob, name);
+      });
+    return;
+  }
+  downloadReleve(blob, name);
+}
+function downloadReleve(blob, name){
+  var url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+  setSaveStatus('Relevé exporté : ' + name);
+}
+function importReleve(file){
+  var reader = new FileReader();
+  reader.onload = function(){
+    var obj;
+    try{ obj = JSON.parse(String(reader.result)); }catch(err){ setSaveStatus('Fichier illisible : ce n\'est pas un relevé RCT-Fouille.', 'bad'); return; }
+    if(!obj || obj.app !== APP_NAME || !obj.state || !obj.state.fouilles){
+      setSaveStatus('Fichier non reconnu : il doit venir de « Exporter le relevé ».', 'bad');
+      return;
+    }
+    var n = obj.state.fouilles.length;
+    if(!window.confirm('Importer ce relevé (' + n + (n > 1 ? ' fouilles' : ' fouille') + ') ? Le relevé en cours sur cet appareil sera remplacé.')) return;
+    clearTimeout(saveTimer); saveTimer = null; restoring = true;
+    setSaveStatus('Import en cours…', 'pending');
+    idb('state', 'readwrite', function(st){ return st.put(obj.state, 'current'); })
+      .then(function(){ return idb('photos', 'readwrite', function(st){ st.clear(); (obj.photos || []).forEach(function(p){ st.put({id:p.id, data:p.data}); }); }); })
+      .then(function(){ location.reload(); })
+      .catch(function(err){ restoring = false; setSaveStatus('Import impossible : ' + ((err && err.message) || err), 'bad'); });
+  };
+  reader.onerror = function(){ setSaveStatus('Lecture du fichier impossible.', 'bad'); };
+  reader.readAsText(file);
+}
+$('export-file').addEventListener('click', exportReleve);
+$('import-file').addEventListener('change', function(){
+  var f = this.files && this.files[0];
+  this.value = '';
+  if(f) importReleve(f);
+});
 
 /* ================= Signatures ================= */
 var SIG_KEYS = ['ca', 'pr'];
