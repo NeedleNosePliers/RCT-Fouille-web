@@ -48,6 +48,8 @@ textarea{resize:vertical}
 .seg button[aria-checked=true]{background:var(--ink);color:var(--panel)}
 .seg button+button{border-left:1px solid var(--line)}
 .hint{font-size:.84rem;color:var(--muted);margin:6px 0 0}
+.admin-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;order:99}
+.btn.small{font-size:.85rem;padding:6px 10px}
 
 /* Cartouches */
 .carts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -236,10 +238,14 @@ details.panel[open] summary{margin-bottom:12px}
       <button type="button" class="btn" id="cancel" hidden>Annuler</button>
     </div>
     <div class="field"><label for="in-name">Repère de la fouille (optionnel)</label><input type="text" id="in-name" placeholder="ex. devant le n°12" autocomplete="off"></div>
-    <div class="seg" role="radiogroup" aria-label="Forme de la fouille">
-      <button type="button" role="radio" aria-checked="true" data-type="rect">Rectangulaire</button>
-      <button type="button" role="radio" aria-checked="false" data-type="L">En L</button>
-      <button type="button" role="radio" aria-checked="false" data-type="T">En T</button>
+    <div class="field">
+      <label for="type-select">Forme de la fouille</label>
+      <select id="type-select">
+        <option value="rect">Rectangulaire</option>
+        <option value="L">En L</option>
+        <option value="T">En T</option>
+        <option value="circle">Circulaire</option>
+      </select>
     </div>
 
     <div class="carts">
@@ -285,6 +291,11 @@ details.panel[open] summary{margin-bottom:12px}
     <p class="hint" id="hint-L" hidden>Longueurs A et B mesurées côté extérieur de l'angle, de bout à bout (angle compris). A et B se rejoignent à l'angle.</p>
 
     <div id="input-errs" role="alert"></div>
+
+    <div class="admin-row">
+      <button type="button" class="btn small" id="admin-btn">ID administrateur</button>
+      <span class="hint" id="admin-state" style="margin:0"></span>
+    </div>
 
     <details class="panel">
       <summary>Infos chantier (pour le PDF)</summary>
@@ -387,7 +398,7 @@ details.panel[open] summary{margin-bottom:12px}
 <script>
 (function(){
 'use strict';
-var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '2.0';
+var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '2.1';
 var APP_LABEL = APP_NAME + ' Ver.' + APP_VERSION;
 var TECH = 'Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif';
 var BODY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -449,7 +460,10 @@ function compute(){
   var t = state.type, errs = [], bad = [], g = {type:t};
   function need(v, label, id){ if(!(v > 0)){ errs.push(label + ' : saisir une valeur supérieure à 0.'); bad.push(id); } }
   var P = num('in-p');
-  if(t === 'rect'){
+  if(t === 'circle'){
+    g.D = num('in-a');
+    need(g.D, 'Diamètre', 'c-a');
+  } else if(t === 'rect'){
     g.L = num('in-a'); g.w = num('in-b');
     need(g.L, 'Longueur', 'c-a'); need(g.w, 'Largeur', 'c-b');
   } else {
@@ -471,7 +485,20 @@ function compute(){
   if(errs.length) return {errs:errs, bad:bad};
 
   var poly, inner = [], dims, cuts, area, dTotal, dSplit, corners;
-  if(t === 'rect'){
+  if(t === 'circle'){
+    // cercle approché par un polygone régulier de 48 côtés : même rendu 3D, plan et coupe que les autres formes
+    var R = g.D/2, N = 48;
+    poly = [];
+    for(var ci = 0; ci < N; ci++){
+      var ang = ci*2*Math.PI/N;
+      poly.push([R + R*Math.cos(ang), R + R*Math.sin(ang)]);
+    }
+    area = Math.PI*R*R;
+    dims = [{a:[0,R], b:[g.D,R], n:[0,-1], label:'Ø = ' + fmt(g.D) + ' m'}];
+    cuts = [{name:'A', title:'Coupe A-A (au diamètre)', w:g.D, a:[0,R], b:[g.D,R]}];
+    dTotal = {c:[0,R], n:[-1,0]}; dSplit = {c:[g.D,R], n:[1,0]};
+    corners = [0, N/4, N/2, 3*N/4]; // droite, haut, gauche, bas
+  } else if(t === 'rect'){
     poly = [[0,0],[g.L,0],[g.L,g.w],[0,g.w]];
     area = g.L * g.w;
     dims = [
@@ -559,6 +586,7 @@ function depthShort(g){
   return g.type === 'T' ? fmt(g.PA) + ' / ' + fmt(g.PB) + ' m' : fmt(g.Ptot) + ' m';
 }
 function dimsText(g){
+  if(g.type === 'circle') return 'Ø ' + fmt(g.D) + ' m';
   if(g.type === 'T') return 'en T, A ' + fmt(g.LA) + ' × ' + fmt(g.wA) + ' / B ' + fmt(g.LB) + ' × ' + fmt(g.wB) + ' m';
   return g.type === 'rect'
     ? fmt(g.L) + ' × ' + fmt(g.w) + ' m'
@@ -1013,7 +1041,13 @@ function photoWarp(p, g){
   if(!g || g.errs) return {ok:false, msg:'Cotes absentes.'};
   if(!p.pts || p.pts.length !== g.corners.length) return {ok:false, msg:'Points à replacer.'};
   var parts = [], outline, map = null;
-  if(g.type === 'L'){
+  if(g.type === 'circle'){
+    // 4 repères sur le bord du cercle : droite, haut, gauche, bas
+    map = partMap(p, g.corners.map(function(i){ return g.poly[i]; }), p.pts);
+    if(!map) return {ok:false, msg:'Points alignés ou confondus : écarte-les.'};
+    parts = [{r:[0, g.D, 0, g.D], map:map}];
+    outline = g.poly.map(function(q){ return map(q[0], q[1]); });
+  } else if(g.type === 'L'){
     // 6 angles. Le point (0 ; larg. A), où les deux branches se rejoignent côté extérieur, n'est pas un angle :
     // on le retrouve à l'intersection du côté 1-6 et de la ligne 3-4 (une perspective conserve les droites).
     var v = p.pts, J = lineCross(v[0], v[5], v[2], v[3]);
@@ -1040,6 +1074,7 @@ function photoWarp(p, g){
 function defaultPts(p, g){
   var w = p.w, h = p.h;
   if(g && g.type === 'L') return [[0.2*w,0.76*h],[0.8*w,0.76*h],[0.8*w,0.66*h],[0.3*w,0.66*h],[0.3*w,0.3*h],[0.2*w,0.3*h]];
+  if(g && g.type === 'circle') return [[0.82*w,0.58*h],[0.5*w,0.36*h],[0.18*w,0.58*h],[0.5*w,0.86*h]];
   if(g && g.type === 'T') return [[0.15*w,0.8*h],[0.85*w,0.8*h],[0.85*w,0.68*h],[0.55*w,0.68*h],[0.55*w,0.3*h],[0.45*w,0.3*h],[0.45*w,0.68*h],[0.15*w,0.68*h]];
   return [[0.25*w,0.7*h],[0.75*w,0.7*h],[0.68*w,0.48*h],[0.32*w,0.48*h]];
 }
@@ -1047,7 +1082,7 @@ function defaultRod(p, g){
   var top = [p.w*0.5, p.h*0.55];
   var wp = photoWarp(p, g);
   if(wp.ok && wp.map){
-    var c = g.type === 'L' ? [g.LA*0.6, g.wA/2] : g.type === 'T' ? [g.LA*0.2, g.wA/2] : [g.L/2, g.w/2];
+    var c = g.type === 'L' ? [g.LA*0.6, g.wA/2] : g.type === 'T' ? [g.LA*0.2, g.wA/2] : g.type === 'circle' ? [g.D/2, g.D/2] : [g.L/2, g.w/2];
     var m = wp.map(c[0], c[1]);
     top = [clamp(m[0], 0, p.w), clamp(m[1], 0, p.h)];
   }
@@ -1073,6 +1108,14 @@ function drawShape(ctx, p, g, wp, lw){
 // Quadrillage tous les GRID m, tracé par rectangles convexes de la forme (les droites restent droites après homographie)
 var GRID = 0.5;
 function drawGrid(ctx, g, wp, lw){
+  var clipped = false;
+  if(g.type === 'circle' && wp.outline){
+    // quadrillage limité au disque
+    ctx.save(); clipped = true;
+    ctx.beginPath();
+    wp.outline.forEach(function(q, i){ if(i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); });
+    ctx.closePath(); ctx.clip();
+  }
   ctx.beginPath();
   wp.parts.forEach(function(part){
     var m = part.map, r = part.r;
@@ -1093,6 +1136,7 @@ function drawGrid(ctx, g, wp, lw){
   ctx.lineCap = 'butt';
   ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 2.6*lw; ctx.stroke();
   ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.2*lw; ctx.stroke();
+  if(clipped) ctx.restore();
 }
 function drawRod(ctx, p, g, lw){
   var T = p.rod.top, B = p.rod.bot;
@@ -1179,6 +1223,15 @@ function drawLoupe(ctx, p, pt, S){
 function schemaSVG(g){
   // schéma de principe (pas à l'échelle) : numéros des coins à pointer
   var W = 150, H = 110, poly;
+  if(g.type === 'circle'){
+    var o2 = '<svg viewBox="0 0 150 110" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" font-family=\'' + TECH + '\' font-size="11" font-weight="700">';
+    o2 += '<circle cx="75" cy="55" r="42" fill="#B98A55" fill-opacity=".45" stroke="currentColor" stroke-width="1.5"/>';
+    [[117,55],[75,13],[33,55],[75,97]].forEach(function(q, k){
+      o2 += '<circle cx="' + q[0] + '" cy="' + q[1] + '" r="8" fill="#F2B705" stroke="#1E2830"/>';
+      o2 += '<text x="' + q[0] + '" y="' + (q[1] + 4) + '" text-anchor="middle" fill="#1E2830">' + (k+1) + '</text>';
+    });
+    return o2 + '</svg>';
+  }
   if(g.type === 'rect') poly = [[18,72],[132,72],[132,40],[18,40]];
   else if(g.type === 'T') poly = [[14,94],[136,94],[136,72],[89,72],[89,12],[61,12],[61,72],[14,72]];
   else poly = [[18,98],[136,98],[136,72],[46,72],[46,12],[18,12]];
@@ -1372,6 +1425,8 @@ function fouillePages(f, multi, head, chantierTable, obsTable, c){
   var geo = '';
   if(g.type === 'T'){
     tRows(g).forEach(function(r){ geo += row(r[0], r[1], r[2] ? 'n' : ''); });
+  } else if(g.type === 'circle'){
+    geo += row('Forme', 'Circulaire') + row('Diamètre', fmt(g.D) + ' m', 'n');
   } else if(g.type === 'rect'){
     geo += row('Forme', 'Rectangulaire') + row('Longueur', fmt(g.L) + ' m', 'n') + row('Largeur', fmt(g.w) + ' m', 'n');
   } else {
@@ -1465,12 +1520,14 @@ function buildReport(){
 /* ================= Navigation / interface ================= */
 function syncInput(){
   var T = state.type === 'T';
-  var L = state.type === 'L' || T;
-  document.querySelectorAll('.seg button[data-type]').forEach(function(b){ b.setAttribute('aria-checked', String(b.dataset.type === state.type)); });
-  $('lb-a').textContent = L ? 'Longueur A' : 'Longueur';
+  var C = state.type === 'circle';
+  var L = (state.type === 'L' || T);
+  $('type-select').value = state.type;
+  $('lb-a').textContent = C ? 'Diamètre Ø' : (L ? 'Longueur A' : 'Longueur');
   $('lb-b').textContent = L ? 'Largeur A' : 'Largeur';
-  $('sub-a').textContent = L ? 'branche A' : '';
+  $('sub-a').textContent = C ? 'au niveau du sol' : (L ? 'branche A' : '');
   $('sub-b').textContent = L ? 'branche A' : '';
+  $('c-b').hidden = C;
   $('c-lb').hidden = !L; $('c-wb').hidden = !L; $('hint-L').hidden = state.type !== 'L';
   $('hint-T').hidden = !T; $('c-pb').hidden = !T;
   $('sub-lb').textContent = T ? 'depuis le bord de A' : 'branche B';
@@ -1593,9 +1650,7 @@ $('del-f').addEventListener('click', function(){
 window.addEventListener('beforeunload', function(ev){
   if(saveTimer){ saveNow(); ev.preventDefault(); ev.returnValue = ''; }
 });
-document.querySelectorAll('.seg button[data-type]').forEach(function(b){
-  b.addEventListener('click', function(){ state.type = b.dataset.type; syncInput(); });
-});
+$('type-select').addEventListener('change', function(){ state.type = this.value; syncInput(); });
 ['in-a','in-b','in-lb','in-wb','in-p','in-pb','in-e'].forEach(function(id){
   $(id).addEventListener('input', function(){ $(id).closest('.cart').classList.remove('bad'); $('input-errs').innerHTML = ''; });
 });
@@ -1856,6 +1911,8 @@ function fouilleRows(f){
   var g = f.g, geo = [], vol = [];
   if(g.type === 'T'){
     tRows(g).forEach(function(r){ geo.push([r[0], r[1], r[2] ? {num:1} : null]); });
+  } else if(g.type === 'circle'){
+    geo.push(['Forme', 'Circulaire'], ['Diamètre', fmt(g.D) + ' m', {num:1}]);
   } else if(g.type === 'rect'){
     geo.push(['Forme', 'Rectangulaire'], ['Longueur', fmt(g.L) + ' m', {num:1}], ['Largeur', fmt(g.w) + ' m', {num:1}]);
   } else {
@@ -2394,10 +2451,36 @@ function arError(text){
   $('input-errs').innerHTML = '<ul class="errs"><li>' + esc(text) + '</li></ul>';
   try{ window.alert(text); }catch(err){}
 }
+var ADMIN_CODE = 'GTRIVINO';
+var arReady = false, isAdmin = false;
+try{ isAdmin = localStorage.getItem('rctAdmin') === '1'; }catch(err){}
 function showArButtons(ok){
-  document.querySelectorAll('.ar-btn').forEach(function(b){ b.hidden = !ok; });
-  $('ar-hint').hidden = !ok;
+  arReady = !!ok;
+  var show = arReady && isAdmin;
+  document.querySelectorAll('.ar-btn').forEach(function(b){ b.hidden = !show; });
+  $('ar-hint').hidden = !show;
+  $('admin-state').textContent = isAdmin
+    ? (arReady ? 'Mode administrateur actif : mesure à la caméra disponible.' : 'Mode administrateur actif (mesure à la caméra indisponible sur cet appareil).')
+    : 'Mesure à la caméra réservée à l\'administrateur.';
 }
+$('admin-btn').addEventListener('click', function(){
+  if(isAdmin){
+    if(!window.confirm('Désactiver le mode administrateur ? La mesure à la caméra sera de nouveau masquée.')) return;
+    isAdmin = false;
+    try{ localStorage.setItem('rctAdmin', '0'); }catch(err){}
+    showArButtons(arReady);
+    return;
+  }
+  var code = window.prompt('Code administrateur :');
+  if(code === null) return;
+  if(code.trim().toUpperCase() !== ADMIN_CODE){
+    $('admin-state').textContent = 'Code incorrect.';
+    return;
+  }
+  isAdmin = true;
+  try{ localStorage.setItem('rctAdmin', '1'); }catch(err){}
+  showArButtons(arReady);
+});
 function initAr(){
   if(!isApp()){
     webXrSupported().then(showArButtons);
@@ -2433,6 +2516,7 @@ document.querySelectorAll('.ar-btn').forEach(function(b){
     });
   });
 });
+showArButtons(false);
 initAr();
 
 /* ================= Transfert du relevé (export / import) ================= */
