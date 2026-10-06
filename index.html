@@ -68,6 +68,17 @@ textarea{resize:vertical}
 .mini-btn{margin-top:8px;align-self:flex-start;font:600 .9rem var(--tech);padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);cursor:pointer}
 .cart.side .ar-btn{margin-top:6px;padding:4px 8px;font-size:.82rem}
 .cart.side .ar-btn svg{width:15px;height:15px}
+.cart-in select{flex:1;min-width:0;border:0;border-bottom:2px solid var(--line);border-radius:0;background:transparent;
+  font:600 1.15rem var(--tech);padding:6px 0;color:var(--ink)}
+.cart-in select:focus{border-bottom-color:var(--tape);outline:none}
+#parts-box{margin-top:14px}
+#parts-tog{margin-bottom:8px}
+.part-blk{margin-top:12px;padding-left:10px;border-left:4px solid var(--tape)}
+.part-blk h4{margin:0 0 6px;font:700 .95rem var(--tech);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.part-blk .carts{grid-template-columns:1fr 1fr 1fr}
+@media (max-width:560px){.part-blk .carts{grid-template-columns:1fr 1fr}}
+.part-sum{font-size:.84rem;color:var(--muted);margin:8px 0 0}
+.part-sum.bad{color:var(--err);font-weight:600}
 .cart textarea{margin-top:6px;border:0;border-bottom:2px solid var(--line);border-radius:0;background:transparent;padding:4px 0;font:1rem/1.4 var(--body);min-height:4.2em}
 .cart textarea:focus{border-bottom-color:var(--tape);outline:none}
 .cart.side{padding:8px 10px 6px}
@@ -312,6 +323,26 @@ details.panel[open] summary{margin-bottom:12px}
         <textarea id="in-com" rows="3" placeholder="ex. réseaux rencontrés, nature du sol, contraintes, réfection prévue…"></textarea>
       </div>
     </div>
+    <div id="parts-box">
+      <label class="check" id="parts-tog"><input type="checkbox" id="in-parts-on"> Profondeur et démolition par portions</label>
+      <div id="parts-cfg" hidden>
+        <p class="hint" id="parts-hint">Une portion est une bande de toute l’emprise, perpendiculaire au sens choisi (chaussée puis trottoir, par exemple). Saisis la longueur de chaque portion : la dernière prend le reste. Chaque portion a sa profondeur et son épaisseur de démolition, comprise dans sa profondeur.</p>
+        <div class="carts">
+          <div class="cart" id="c-pdir">
+            <label for="in-pdir">Sens du découpage</label><span class="sub">les limites sont perpendiculaires</span>
+            <div class="cart-in"><select id="in-pdir"><option value="x">dans la longueur</option><option value="y">dans la largeur</option></select></div>
+          </div>
+          <div class="cart" id="c-pn">
+            <label for="in-pn">Nombre de portions</label><span class="sub">2 à 8</span>
+            <div class="cart-in"><input id="in-pn" type="text" inputmode="numeric" placeholder="2" autocomplete="off"><span>port.</span></div>
+          </div>
+        </div>
+        <div id="parts-list"></div>
+        <p class="part-sum" id="parts-sum"></p>
+      </div>
+    </div>
+    <input type="hidden" id="in-parts">
+
     <p class="hint" id="ar-hint" hidden>« Mesurer » : longueurs et largeurs à la caméra (conseils affichés à l'ouverture de la caméra). La profondeur se saisit au clavier. Valeur approximative, à vérifier au mètre.</p>
     <p class="hint" id="hint-T" hidden>Fouille en T : la branche B part du milieu de la branche A. Longueur B mesurée depuis le bord de A jusqu'au bout de B. Une profondeur par branche, démolition comprise.</p>
     <p class="hint" id="hint-L" hidden>Longueurs A et B mesurées côté extérieur de l'angle, de bout à bout (angle compris). A et B se rejoignent à l'angle.</p>
@@ -424,7 +455,7 @@ details.panel[open] summary{margin-bottom:12px}
 <script>
 (function(){
 'use strict';
-var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '2.2';
+var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '2.4';
 var APP_LABEL = APP_NAME + ' Ver.' + APP_VERSION;
 var TECH = 'Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif';
 var BODY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -435,7 +466,7 @@ var MAXPH = 4, MAXPX = 1600;
 var state = {type:'rect', mode:'incl', az:-35, el:30, vex:1, step:'input'};
 var current = null;
 var fouilles = [], cur = -1, fSeq = 0;
-var FIELDS = ['in-name','in-a','in-b','in-lb','in-wb','in-p','in-pb','in-e','in-com','in-np','in-poly'];
+var FIELDS = ['in-name','in-a','in-b','in-lb','in-wb','in-p','in-pb','in-e','in-com','in-np','in-poly','in-parts'];
 function F(){ return fouilles[cur]; }
 function newFouille(prev){ return {id:++fSeq, name:'', type:'rect', mode:'incl', vals:{}, g:null, photos:[]}; }
 function doneList(){ return fouilles.filter(function(f){ return f.g; }); }
@@ -574,6 +605,57 @@ function polyCut(pts){
   return best || {y:polyCentroid(pts)[1], x0:0, x1:0};
 }
 
+
+/* ================= Portions : profondeur et démolition par bandes ================= */
+var PARTMIN = 2, PARTMAX = 8;
+function partsRead(){
+  try{
+    var o = JSON.parse($('in-parts').value || 'null');
+    if(o && o.parts && o.parts.length >= PARTMIN){
+      return {on:!!o.on, dir:(o.dir === 'y' ? 'y' : 'x'), parts:o.parts.map(function(q){
+        return {l:Number(q.l) || 0, p:Number(q.p) || 0, e:Number(q.e) || 0};
+      })};
+    }
+  }catch(err){}
+  return null;
+}
+function partsState(){
+  var st = partsRead();
+  if(!st) st = {on:false, dir:'x', parts:[{l:0, p:0, e:0}, {l:0, p:0, e:0}]};
+  st.on = $('in-parts-on').checked;
+  return st;
+}
+// découpe d'un polygone simple par une bande v0 <= axe <= v1 (Sutherland-Hodgman)
+function clipHalf(poly, ax, val, keepLess){
+  var out = [], n = poly.length, i;
+  for(i = 0; i < n; i++){
+    var a = poly[i], b = poly[(i+1)%n];
+    var va = ax ? a[1] : a[0], vb = ax ? b[1] : b[0];
+    var ina = keepLess ? va <= val + 1e-9 : va >= val - 1e-9;
+    var inb = keepLess ? vb <= val + 1e-9 : vb >= val - 1e-9;
+    if(ina) out.push(a);
+    if(ina !== inb && Math.abs(vb - va) > 1e-12){
+      var t = (val - va)/(vb - va);
+      out.push([a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t]);
+    }
+  }
+  return out;
+}
+function clipStrip(poly, dir, v0, v1){
+  var ax = dir === 'y' ? 1 : 0;
+  var q = clipHalf(poly, ax, v0, false);
+  if(q.length < 3) return [];
+  q = clipHalf(q, ax, v1, true);
+  return q.length < 3 ? [] : q;
+}
+function extentOf(poly, dir){
+  var ax = dir === 'y' ? 1 : 0;
+  var mx = -Infinity, mn = Infinity;
+  poly.forEach(function(q){ mx = Math.max(mx, q[ax]); mn = Math.min(mn, q[ax]); });
+  return {min:mn, max:mx, len:mx - mn};
+}
+function partLabel(st){ return st.dir === 'y' ? 'largeur' : 'longueur'; }
+
 /* ================= Calculs ================= */
 function compute(){
   var t = state.type, errs = [], bad = [], g = {type:t};
@@ -612,11 +694,28 @@ function compute(){
     if(t === 'L' && g.LB > 0 && g.wA > 0 && g.wA >= g.LB){ errs.push('Largeur A : doit être inférieure à la longueur B.'); bad.push('c-b'); }
     if(t === 'T'){ g.PB = num('in-pb'); need(g.PB, 'Profondeur B', 'c-pb'); }
   }
-  var ecm = blank('in-e') ? 0 : num('in-e');
+  var PST = partsState();
+  if(PST.on && t === 'T'){
+    errs.push('Portions : non disponible sur la fouille en T, qui a déjà une profondeur par branche. Décocher les portions ou choisir une autre forme.');
+    bad.push('c-pn');
+  }
+  if(PST.on && !errs.length){
+    g.partsOn = 1; g.dir = PST.dir;
+    var np = PST.parts.length;
+    if(np < PARTMIN || np > PARTMAX){ errs.push('Portions : entre ' + PARTMIN + ' et ' + PARTMAX + ' portions.'); bad.push('c-pn'); }
+    PST.parts.forEach(function(pt, i){
+      var no = i + 1;
+      if(i < np - 1 && !(pt.l > 0.02)){ errs.push('Portion ' + no + ' : saisir une ' + partLabel(PST) + ' supérieure à 0.'); bad.push('c-pt-l-' + i); }
+      if(!(pt.p > 0)){ errs.push('Portion ' + no + ' : saisir une profondeur supérieure à 0.'); bad.push('c-pt-p-' + i); }
+      if(!(pt.e >= 0)){ errs.push('Portion ' + no + ' : démolition en cm, ou 0.'); bad.push('c-pt-e-' + i); }
+      else if(pt.p > 0 && pt.e/100 >= pt.p){ errs.push('Portion ' + no + ' : la démolition doit être inférieure à la profondeur.'); bad.push('c-pt-e-' + i); }
+    });
+  }
+  var ecm = (PST.on || blank('in-e')) ? 0 : num('in-e');
   if(!(ecm >= 0)){ errs.push('Démolition : saisir une épaisseur en cm, ou laisser vide.'); bad.push('c-e'); ecm = 0; }
   var demo = ecm > 0;
   var incl = demo && state.mode === 'incl';
-  need(P, t === 'T' ? 'Profondeur A' : (incl ? 'Profondeur totale' : 'Profondeur'), 'c-p');
+  if(!PST.on) need(P, t === 'T' ? 'Profondeur A' : (incl ? 'Profondeur totale' : 'Profondeur'), 'c-p');
   var e = ecm / 100;
   if(incl && P > 0 && e >= P){ errs.push('Démolition : doit être inférieure à la profondeur' + (t === 'T' ? ' A.' : ' totale.')); bad.push('c-e'); }
   if(t === 'T' && demo && g.PB > 0 && e >= g.PB){ errs.push('Démolition : doit être inférieure à la profondeur B.'); bad.push('c-e'); }
@@ -723,8 +822,93 @@ function compute(){
     g.Vf = g.Vt - g.Vd;
     g.Pf = null;
   }
+  if(PST.on){
+    var ex = extentOf(poly, PST.dir), np2 = PST.parts.length, acc = ex.min, prisms = [], i2;
+    var used = 0;
+    for(i2 = 0; i2 < np2 - 1; i2++) used += PST.parts[i2].l;
+    if(used >= ex.len - 0.02){
+      return {errs:['Portions : le total des ' + partLabel(PST) + 's saisies (' + fmt(used) + ' m) atteint ou dépasse l’emprise (' + fmt(ex.len) + ' m). Réduire une portion ou en retirer une.'], bad:['c-pn']};
+    }
+    for(i2 = 0; i2 < np2; i2++){
+      var ln = i2 === np2 - 1 ? ex.max - acc : PST.parts[i2].l;
+      var v0 = acc, v1 = i2 === np2 - 1 ? ex.max : acc + ln;
+      var sub = clipStrip(poly, PST.dir, v0, v1);
+      var ar = sub.length ? Math.abs(shoelace(sub)) : 0;
+      prisms.push({poly:sub, area:ar, v0:v0, v1:v1, len:v1 - v0,
+        P:PST.parts[i2].p, e:PST.parts[i2].e/100, no:i2 + 1});
+      acc = v1;
+    }
+    var zero = prisms.filter(function(pz){ return pz.area < 1e-6; });
+    if(zero.length){
+      return {errs:['Portion ' + zero[0].no + ' : hors de l’emprise de la fouille (surface nulle). Vérifier les ' + partLabel(PST) + 's.'], bad:['c-pn']};
+    }
+    g.prisms = prisms; g.dir = PST.dir; g.partsOn = 1;
+    // les cotes des côtés laissent la place aux cotes de profondeur : elles restent sur le plan
+    if(t === 'poly') g.dims3 = [];
+    g.area = prisms.reduce(function(a, pz){ return a + pz.area; }, 0);
+    g.Vt = prisms.reduce(function(a, pz){ return a + pz.area*pz.P; }, 0);
+    g.Vd = prisms.reduce(function(a, pz){ return a + pz.area*pz.e; }, 0);
+    g.Vf = g.Vt - g.Vd;
+    g.P = Math.max.apply(null, prisms.map(function(pz){ return pz.P; }));
+    g.Ptot = g.P;
+    g.Pmin = Math.min.apply(null, prisms.map(function(pz){ return pz.P; }));
+    g.e = Math.max.apply(null, prisms.map(function(pz){ return pz.e; }));
+    g.eMin = Math.min.apply(null, prisms.map(function(pz){ return pz.e; }));
+    g.Pf = null;
+    g.demo = g.e > 0;
+    g.boxes = null; g.depthDims = null;
+    // coupes : profil en long + coupe en travers de la portion la plus profonde
+    var deep = prisms.slice().sort(function(a, b){ return b.P - a.P; })[0];
+    var mid = (deep.v0 + deep.v1)/2;
+    var span = spanAt(poly, PST.dir === 'y' ? 1 : 0, mid);
+    g.cuts = [{name:'A', title:'Coupe A-A (portion ' + deep.no + ', la plus profonde)',
+      w:Math.max(0.05, span[1] - span[0]), P:deep.P, e:deep.e,
+      a:PST.dir === 'y' ? [span[0], mid] : [mid, span[0]],
+      b:PST.dir === 'y' ? [span[1], mid] : [mid, span[1]]}];
+    g.profile = 1;
+    g.mode = state.mode;
+    return g;
+  }
   g.demo = demo; g.mode = state.mode;
   return g;
+}
+// intervalles de la droite (axe fixe = ax) à l'intérieur du polygone
+function lineIntervals(pl, ax, val){
+  var n = pl.length, oth = ax ? 0 : 1, xs = [], i;
+  for(i = 0; i < n; i++){
+    var a = pl[i], b = pl[(i+1)%n];
+    if((a[ax] > val) === (b[ax] > val)) continue;
+    xs.push(a[oth] + (b[oth] - a[oth])*(val - a[ax])/(b[ax] - a[ax]));
+  }
+  xs.sort(function(p, q){ return p - q; });
+  var out = [];
+  for(i = 0; i + 1 < xs.length; i += 2) out.push([xs[i], xs[i+1]]);
+  return out;
+}
+function interIntervals(A, B){
+  var out = [];
+  A.forEach(function(a){
+    B.forEach(function(b){
+      var lo = Math.max(a[0], b[0]), hi = Math.min(a[1], b[1]);
+      if(hi - lo > 1e-6) out.push([lo, hi]);
+    });
+  });
+  return out;
+}
+// corde intérieure la plus large de la droite (axe fixe = ax) passant par val
+function spanAt(poly, ax, val){
+  var n = poly.length, xs = [], i;
+  for(i = 0; i < n; i++){
+    var a = poly[i], b = poly[(i+1)%n];
+    var va = a[ax], vb = b[ax];
+    if((va > val) === (vb > val)) continue;
+    var t = (val - va)/(vb - va), oth = ax ? 0 : 1;
+    xs.push(a[oth] + (b[oth] - a[oth])*t);
+  }
+  xs.sort(function(p, q){ return p - q; });
+  var best = [0, 0];
+  for(i = 0; i + 1 < xs.length; i += 2) if(xs[i+1] - xs[i] > best[1] - best[0]) best = [xs[i], xs[i+1]];
+  return best;
 }
 
 function tRows(g){
@@ -742,10 +926,23 @@ function tVolRows(g){
   return [['Volume branche A', fmt(g.VtA, 3) + ' m³'], ['Volume branche B', fmt(g.VtB, 3) + ' m³']];
 }
 function depthText(g){
+  if(g.prisms) return g.Pmin === g.Ptot ? 'P ' + fmt(g.Ptot) + ' m' : 'P ' + fmt(g.Pmin) + ' \u00e0 ' + fmt(g.Ptot) + ' m';
   return g.type === 'T' ? 'P A ' + fmt(g.PA) + ' / P B ' + fmt(g.PB) + ' m' : 'P ' + fmt(g.Ptot) + ' m';
 }
 function depthShort(g){
+  if(g.prisms) return g.Pmin === g.Ptot ? fmt(g.Ptot) + ' m' : fmt(g.Pmin) + ' \u00e0 ' + fmt(g.Ptot) + ' m';
   return g.type === 'T' ? fmt(g.PA) + ' / ' + fmt(g.PB) + ' m' : fmt(g.Ptot) + ' m';
+}
+function demoShort(g){
+  if(g.prisms) return g.e > 0 ? (g.eMin === g.e ? fmtCm(g.e) : fmtCm(g.eMin) + ' \u00e0 ' + fmtCm(g.e)) : '\u2014';
+  return g.e > 0 ? fmtCm(g.e) : '\u2014';
+}
+function partRows(g){
+  return g.prisms.map(function(pz){
+    return ['Portion ' + pz.no,
+      fmt(pz.len) + ' m \u00b7 ' + fmt(pz.area) + ' m\u00b2 \u00b7 P ' + fmt(pz.P) + ' m' +
+      (pz.e > 0 ? ' \u00b7 d\u00e9molition ' + fmtCm(pz.e) : ' \u00b7 sans d\u00e9molition')];
+  });
 }
 function polySideList(g){
   return g.lens.map(function(v, i){
@@ -753,6 +950,10 @@ function polySideList(g){
   }).join(' · ');
 }
 function dimsText(g){
+  if(g.prisms) return dimsBase(g) + ', ' + g.prisms.length + ' portions';
+  return dimsBase(g);
+}
+function dimsBase(g){
   if(g.type === 'poly') return 'polygone ' + g.poly.length + ' points, périmètre ' + fmt(g.per) + ' m';
   if(g.type === 'circle') return 'Ø ' + fmt(g.D) + ' m';
   if(g.type === 'T') return 'en T, A ' + fmt(g.LA) + ' × ' + fmt(g.wA) + ' / B ' + fmt(g.LB) + ' × ' + fmt(g.wB) + ' m';
@@ -768,8 +969,8 @@ function recapHTML(list, esc2){
     var g = f.g;
     t.area += g.area; t.Vd += g.Vd; t.Vf += g.Vf; t.Vt += g.Vt;
     var cm = fComment(f);
-    h += '<tr><td>' + esc(fLabel(f)) + (cm ? '<br><small style="color:var(--muted,#5E6A72)">' + esc(cm.length > 80 ? cm.slice(0, 80) + '…' : cm) + '</small>' : '') + '</td><td>' + dimsText(g) + '</td><td class="n">' + fmt(g.Ptot) + ' m</td>' +
-      '<td class="n">' + (g.e > 0 ? fmtCm(g.e) : '—') + '</td><td class="n">' + fmt(g.area) + ' m²</td>' +
+    h += '<tr><td>' + esc(fLabel(f)) + (cm ? '<br><small style="color:var(--muted,#5E6A72)">' + esc(cm.length > 80 ? cm.slice(0, 80) + '…' : cm) + '</small>' : '') + '</td><td>' + dimsText(g) + '</td><td class="n">' + depthShort(g) + '</td>' +
+      '<td class="n">' + demoShort(g) + '</td><td class="n">' + fmt(g.area) + ' m²</td>' +
       '<td class="n">' + fmt(g.Vd, 3) + ' m³</td><td class="n">' + fmt(g.Vf, 3) + ' m³</td><td class="n">' + fmt(g.Vt, 3) + ' m³</td></tr>';
   });
   h += '<tr class="tot"><td>Total (' + list.length + ' fouilles)</td><td></td><td></td><td></td><td class="n">' + fmt(t.area) + ' m²</td>' +
@@ -777,13 +978,26 @@ function recapHTML(list, esc2){
   return h + '</tbody></table>';
 }
 function renderResults(g){
-  var cells = [['Emprise', fmt(g.area), 'm²'], g.type === 'T' ? ['Profondeurs A / B', fmt(g.PA) + ' / ' + fmt(g.PB), 'm'] : ['Profondeur totale', fmt(g.Ptot), 'm']];
+  var cells = [['Emprise', fmt(g.area), 'm²'],
+    g.prisms ? [(g.Pmin === g.Ptot ? 'Profondeur' : 'Profondeurs'), (g.Pmin === g.Ptot ? fmt(g.Ptot) : fmt(g.Pmin) + ' à ' + fmt(g.Ptot)), 'm']
+    : g.type === 'T' ? ['Profondeurs A / B', fmt(g.PA) + ' / ' + fmt(g.PB), 'm']
+    : ['Profondeur totale', fmt(g.Ptot), 'm']];
   if(g.e > 0){ cells.push(['Volume démolition', fmt(g.Vd, 3), 'm³']); cells.push(['Volume fouille', fmt(g.Vf, 3), 'm³']); }
   var html = '<dl class="res">' + cells.map(function(c){
     return '<div><dt>' + c[0] + '</dt><dd>' + c[1] + ' <small>' + c[2] + '</small></dd></div>';
   }).join('');
   html += '<div class="total"><dt>Volume total en place</dt><dd>' + fmt(g.Vt, 3) + ' <small>m³</small></dd></div></dl>';
   html += '<p class="hint">Volumes en place (non foisonnés), calculés depuis les cotes saisies.</p>';
+  if(g.prisms){
+    html += '<table class="recap"><thead><tr><th>Portion</th><th class="n">' + (g.dir === 'y' ? 'Largeur' : 'Longueur') +
+      '</th><th class="n">Surface</th><th class="n">P</th><th class="n">Démol.</th><th class="n">V démol.</th><th class="n">V total</th></tr></thead><tbody>';
+    g.prisms.forEach(function(pz){
+      html += '<tr><td>Portion ' + pz.no + '</td><td class="n">' + fmt(pz.len) + ' m</td><td class="n">' + fmt(pz.area) +
+        ' m²</td><td class="n">' + fmt(pz.P) + ' m</td><td class="n">' + (pz.e > 0 ? fmtCm(pz.e) : '—') +
+        '</td><td class="n">' + fmt(pz.area*pz.e, 3) + ' m³</td><td class="n">' + fmt(pz.area*pz.P, 3) + ' m³</td></tr>';
+    });
+    html += '</tbody></table>';
+  }
   var com = fComment(F());
   if(com) html += '<div class="comment"><h3>Commentaire</h3><p>' + esc(com).replace(/\n/g, '<br>') + '</p></div>';
   $('results').innerHTML = html;
@@ -856,6 +1070,7 @@ function render3D(ctx, W, H, g, o){
   var maxD = Math.max(bw, bh), cx0 = bw/2, cy0 = bh/2;
   var zb = -g.Ptot*o.vex, ze = -g.e*o.vex;
   var boxes = g.boxes || null;
+  var prisms = g.prisms || null;
   var gm = Math.max(0.4, maxD*0.12);
   var ground = [[-gm,-gm],[bw+gm,-gm],[bw+gm,bh+gm],[-gm,bh+gm]];
   function pr(x, y, z){
@@ -871,7 +1086,9 @@ function render3D(ctx, W, H, g, o){
   var narrow = W/k < 560;
   var fs = narrow ? 11.5 : 12.5;
   ctx.font = '600 ' + Math.round(fs*k) + 'px ' + TECH;
-  var depthLabels = g.type === 'T'
+  var depthLabels = g.prisms
+    ? g.prisms.map(function(pz){ return 'P' + pz.no + ' = ' + fmt(pz.P) + ' m'; })
+    : g.type === 'T'
     ? g.depthDims.map(function(d){ return d.label; })
     : g.e > 0
     ? ['P totale = ' + fmt(g.Ptot) + ' m', 'Démolition ' + fmtCm(g.e), 'Fouille ' + fmt(g.Pf) + ' m']
@@ -895,7 +1112,105 @@ function render3D(ctx, W, H, g, o){
   ctx.fillStyle = c.ground; ctx.fill();
   ctx.setLineDash([6*k,4*k]); ctx.strokeStyle = c.groundLine; ctx.lineWidth = k; ctx.stroke(); ctx.setLineDash([]);
 
-  if(boxes){
+  if(prisms){
+    // Portions : UNE SEULE fouille, dont le fond change de niveau d'une portion à l'autre.
+    // Les parois extérieures sont découpées aux limites de portions et descendent chacune
+    // à la profondeur de sa portion ; aucune paroi interne n'est dessinée, seulement la
+    // contremarche là où deux portions voisines n'ont pas la même profondeur.
+    var sgnP = g.ccw || 1;
+    var axP = g.dir === 'y' ? 1 : 0;
+    var uA = pr(axP ? 0 : 1, axP ? 1 : 0, 0), uO = pr(0, 0, 0);
+    var orderP = (uA[1] - uO[1]) > 0 ? prisms.slice().reverse() : prisms.slice();
+    var innerCuts = [];
+    for(var ic = 1; ic < prisms.length; ic++) innerCuts.push(prisms[ic].v0);
+    var ownerAt = function(v){
+      var ow = prisms[0];
+      prisms.forEach(function(pz){ if(v >= pz.v0 - 1e-9 && v <= pz.v1 + 1e-9) ow = pz; });
+      return ow;
+    };
+    var pieces = [];
+    for(var i4 = 0; i4 < n; i4++){
+      var A4 = poly[i4], B4 = poly[(i4+1)%n];
+      var dxE = B4[0]-A4[0], dyE = B4[1]-A4[1], lnE = Math.hypot(dxE, dyE);
+      if(lnE < 1e-9) continue;
+      var nxE = sgnP*dyE/lnE, nyE = -sgnP*dxE/lnE;
+      var ts = [0, 1];
+      innerCuts.forEach(function(v){
+        if(Math.abs(B4[axP] - A4[axP]) < 1e-12) return;
+        var t = (v - A4[axP])/(B4[axP] - A4[axP]);
+        if(t > 1e-6 && t < 1 - 1e-6) ts.push(t);
+      });
+      ts.sort(function(x, y){ return x - y; });
+      var prev = null;
+      for(var k4 = 0; k4 + 1 < ts.length; k4++){
+        var pA = [A4[0] + dxE*ts[k4], A4[1] + dyE*ts[k4]];
+        var pB = [A4[0] + dxE*ts[k4+1], A4[1] + dyE*ts[k4+1]];
+        if(Math.hypot(pB[0]-pA[0], pB[1]-pA[1]) < 1e-9) continue;
+        // on décale légèrement vers l'intérieur : une paroi parallèle à une limite
+        // appartient à la portion qui la borde
+        var mv = (pA[axP] + pB[axP])/2 - (axP ? nyE : nxE)*1e-4;
+        var ow = ownerAt(mv);
+        if(prev && prev.pz.P === ow.P && prev.pz.e === ow.e){ prev.b = pB; continue; }
+        prev = {a:pA, b:pB, pz:ow, nx:nxE, ny:nyE};
+        pieces.push(prev);
+      }
+    }
+    var risers = [];
+    innerCuts.forEach(function(v){
+      var Pa = ownerAt(v - 1e-6), Pb = ownerAt(v + 1e-6);
+      if(Math.abs(Pa.P - Pb.P) < 1e-9) return;
+      var deep = Pa.P > Pb.P ? Pa : Pb, sh = Pa.P > Pb.P ? Pb : Pa;
+      var sd = Pa.P > Pb.P ? -1 : 1; // normale : du terrain restant vers le vide
+      interIntervals(lineIntervals(poly, axP, v - 1e-4), lineIntervals(poly, axP, v + 1e-4)).forEach(function(it){
+        risers.push({v:v, t0:it[0], t1:it[1], zt:-sh.P*o.vex, zb:-deep.P*o.vex, sd:sd, pz:deep});
+      });
+    });
+    var rPt = function(r, t, z){ return axP ? S(t, r.v, z) : S(r.v, t, z); };
+    var fillOnly = function(arr, fill){
+      ctx.beginPath();
+      arr.forEach(function(q, i){ if(i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); });
+      ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+    };
+    orderP.forEach(function(pz){
+      var zbb = -pz.P*o.vex, zee = -pz.e*o.vex;
+      pieces.forEach(function(w){
+        if(w.pz !== pz) return;
+        var m1x = w.nx*ca - w.ny*sa, m1y = w.nx*sa + w.ny*ca;
+        if(-m1y*ce <= 1e-6) return;
+        var f1 = 0.8 + 0.2*m1x;
+        if(pz.e > 0) face([S(w.a[0],w.a[1],0), S(w.b[0],w.b[1],0), S(w.b[0],w.b[1],zee), S(w.a[0],w.a[1],zee)], shade(c.demo, f1));
+        face([S(w.a[0],w.a[1],zee), S(w.b[0],w.b[1],zee), S(w.b[0],w.b[1],zbb), S(w.a[0],w.a[1],zbb)], shade(c.terre, f1));
+      });
+      risers.forEach(function(r){
+        if(r.pz !== pz) return;
+        var rnx = axP ? 0 : r.sd, rny = axP ? r.sd : 0;
+        var m2x = rnx*ca - rny*sa, m2y = rnx*sa + rny*ca;
+        if(-m2y*ce <= 1e-6) return;
+        face([rPt(r, r.t0, r.zt), rPt(r, r.t1, r.zt), rPt(r, r.t1, r.zb), rPt(r, r.t0, r.zb)], shade(c.terre, 0.8 + 0.2*m2x));
+      });
+      fillOnly(pz.poly.map(function(a2){ return S(a2[0],a2[1],0); }), pz.e > 0 ? shade(c.demo, 1.12) : c.terreTop);
+    });
+    // un seul contour pour toute l'emprise
+    ctx.beginPath();
+    poly.forEach(function(q5, i5){ var r5 = S(q5[0], q5[1], 0); if(i5) ctx.lineTo(r5[0], r5[1]); else ctx.moveTo(r5[0], r5[1]); });
+    ctx.closePath();
+    ctx.strokeStyle = c.edge; ctx.lineWidth = 1.4*k; ctx.lineJoin = 'round'; ctx.stroke();
+    // fond en pointillé, d'un seul tenant
+    ctx.save();
+    ctx.globalAlpha = 0.3; ctx.setLineDash([4*k, 4*k]); ctx.strokeStyle = c.ink; ctx.lineWidth = k;
+    ctx.beginPath();
+    pieces.forEach(function(w){
+      var zb2 = -w.pz.P*o.vex;
+      var A7 = S(w.a[0], w.a[1], zb2), B7 = S(w.b[0], w.b[1], zb2);
+      ctx.moveTo(A7[0], A7[1]); ctx.lineTo(B7[0], B7[1]);
+    });
+    risers.forEach(function(r){
+      var A8 = rPt(r, r.t0, r.zt), B8 = rPt(r, r.t1, r.zt);
+      ctx.moveTo(A8[0], A8[1]); ctx.lineTo(B8[0], B8[1]);
+    });
+    ctx.stroke();
+    ctx.restore();
+  } else if(boxes){
     // Fouille en T : deux blocs (profondeurs différentes) séparés par le plan y = largeur A.
     // Le bloc le plus éloigné de l'observateur est dessiné en premier.
     var order = ca < 0 ? boxes.slice() : boxes.slice().reverse();
@@ -925,7 +1240,7 @@ function render3D(ctx, W, H, g, o){
     ctx.restore();
   }
   var walls = [];
-  for(var i = 0; i < n && !boxes; i++){
+  for(var i = 0; i < n && !boxes && !prisms; i++){
     var p = poly[i], q = poly[(i+1)%n];
     var dx = q[0]-p[0], dy = q[1]-p[1], len = Math.hypot(dx,dy);
     var sgn = g.ccw || 1;
@@ -940,9 +1255,9 @@ function render3D(ctx, W, H, g, o){
     if(g.e > 0) face([S(p[0],p[1],0), S(q[0],q[1],0), S(q[0],q[1],ze), S(p[0],p[1],ze)], shade(c.demo, w.f));
     face([S(p[0],p[1],ze), S(q[0],q[1],ze), S(q[0],q[1],zb), S(p[0],p[1],zb)], shade(c.terre, w.f));
   });
-  if(!boxes) face(poly.map(function(p){ return S(p[0],p[1],0); }), g.e > 0 ? shade(c.demo, 1.12) : c.terreTop, 1.4);
+  if(!boxes && !prisms) face(poly.map(function(p){ return S(p[0],p[1],0); }), g.e > 0 ? shade(c.demo, 1.12) : c.terreTop, 1.4);
 
-  if(!boxes){
+  if(!boxes && !prisms){
   ctx.save();
   ctx.globalAlpha = 0.35; ctx.setLineDash([4*k,4*k]); ctx.strokeStyle = c.ink; ctx.lineWidth = k;
   ctx.beginPath();
@@ -988,7 +1303,21 @@ function render3D(ctx, W, H, g, o){
     }
     items.forEach(function(it){ dimCanvas(ctx, it.A, it.B, dir, 18*k, it.label, c, k, narrow ? 'below' : 'side', it.ly); });
   }
-  if(g.depthDims){
+  if(g.prisms){
+    // une cote par portion, accrochée au coin de la bande le plus bas à l'écran
+    // (coin le plus proche de l'observateur), l'étiquette poussée vers l'extérieur
+    // (les épaisseurs de démolition sont portées sur le plan et sur le profil en long)
+    g.prisms.forEach(function(pz){
+      if(!pz.poly.length) return;
+      var bq = pz.poly[0], bx2 = S(bq[0], bq[1], 0)[1];
+      pz.poly.forEach(function(q4){
+        var sy2 = S(q4[0], q4[1], 0)[1];
+        if(sy2 > bx2){ bx2 = sy2; bq = q4; }
+      });
+      var ddx = bq[0] - cx0, ddy = bq[1] - cy0, ddl = Math.hypot(ddx, ddy) || 1;
+      depthDim({c:bq, n:[ddx/ddl, ddy/ddl]}, [{z1:0, z2:-pz.P*o.vex, label:'P' + pz.no + ' = ' + fmt(pz.P) + ' m'}]);
+    });
+  } else if(g.depthDims){
     g.depthDims.forEach(function(d){ depthDim(d, [{z1:0, z2:-d.P*o.vex, label:d.label}]); });
   } else if(g.e > 0){
     depthDim(g.dTotal, [{z1:0, z2:zb, label:depthLabels[0]}]);
@@ -1078,6 +1407,24 @@ function planSVG(g, c, pfx, W){
   o += '<rect width="' + W + '" height="' + H + '" fill="' + c.bg + '"/>';
   var pts = g.poly.map(function(p){ var q = T(p[0],p[1]); return q[0].toFixed(2) + ',' + q[1].toFixed(2); }).join(' ');
   o += '<polygon points="' + pts + '" fill="' + (g.e > 0 ? 'url(#' + pfx + '-hd)' : c.terreTop) + '" stroke="' + c.ink + '" stroke-width="1.6" stroke-linejoin="round"/>';
+  if(g.prisms){
+    var axp = g.dir === 'y' ? 1 : 0;
+    g.prisms.forEach(function(pz, pi2){
+      if(!pz.poly.length) return;
+      var pts2 = pz.poly.map(function(q){ var r2 = T(q[0],q[1]); return r2[0].toFixed(2) + ',' + r2[1].toFixed(2); }).join(' ');
+      o += '<polygon points="' + pts2 + '" fill="' + (pz.e > 0 ? 'url(#' + pfx + '-hd)' : c.terreTop) + '" fill-opacity="' + (pi2 % 2 ? '1' : '0.72') + '" stroke="none"/>';
+      if(pi2){
+        var va = pz.v0;
+        var sp = spanAt(g.poly, axp, va);
+        var A2 = T(axp ? sp[0] : va, axp ? va : sp[0]), B2 = T(axp ? sp[1] : va, axp ? va : sp[1]);
+        o += '<line x1="' + A2[0].toFixed(1) + '" y1="' + A2[1].toFixed(1) + '" x2="' + B2[0].toFixed(1) + '" y2="' + B2[1].toFixed(1) + '" stroke="' + c.ink + '" stroke-width="1.6" stroke-dasharray="7 4"/>';
+      }
+      var cq = polyCentroid(pz.poly), CT = T(cq[0], cq[1]);
+      var txt2 = 'P' + pz.no + ' ' + fmt(pz.P) + ' m' + (pz.e > 0 ? ' \u00b7 d\u00e9m. ' + fmtCm(pz.e) : ' \u00b7 sans d\u00e9m.');
+      o += '<text x="' + CT[0].toFixed(1) + '" y="' + CT[1].toFixed(1) + '" text-anchor="middle" font-size="11.5" font-weight="700" fill="' + c.ink + '" stroke="' + c.bg + '" stroke-width="4" paint-order="stroke">' + txt2 + '</text>';
+    });
+    o += '<polygon points="' + pts + '" fill="none" stroke="' + c.ink + '" stroke-width="1.6" stroke-linejoin="round"/>';
+  }
   g.cuts.forEach(function(ct){
     var A = T(ct.a[0],ct.a[1]), B = T(ct.b[0],ct.b[1]);
     var dx = B[0]-A[0], dy = B[1]-A[1], l = Math.hypot(dx,dy) || 1; dx /= l; dy /= l;
@@ -1121,7 +1468,7 @@ function planSVG(g, c, pfx, W){
 function coupeSVG(g, ct, c, pfx, W){
   W = W || 520;
   var nar = W < 500;
-  var w = ct.w, D = ct.P || g.Ptot, e = g.e;
+  var w = ct.w, D = ct.P || g.Ptot, e = (ct.e !== undefined ? ct.e : g.e);
   var ext = Math.max(0.25, w*0.6);
   var mL = nar ? 118 : 160, mR = mL, mT = 48, mB = 26;
   var s = Math.min((W-mL-mR)/(w+2*ext), 300/D);
@@ -1151,15 +1498,53 @@ function coupeSVG(g, ct, c, pfx, W){
   }
   return o + '</svg>';
 }
+// Profil en long : la succession des portions, avec leur profondeur et leur démolition
+function profilSVG(g, c, pfx, W){
+  W = W || 640;
+  var nar = W < 500;
+  var pr2 = g.prisms, tot = pr2[pr2.length-1].v1 - pr2[0].v0;
+  var D = Math.max.apply(null, pr2.map(function(p){ return p.P; }));
+  var mL = nar ? 96 : 130, mR = nar ? 54 : 70, mT = 62, mB = 34;
+  var sx = (W - mL - mR)/Math.max(tot, 0.1);
+  var sy = Math.min(sx, 300/Math.max(D, 0.1));
+  var H = mT + D*sy + mB;
+  function X(v){ return mL + (v - pr2[0].v0)*sx; }
+  function Y(v){ return mT + v*sy; }
+  var o = '<svg viewBox="0 0 ' + W + ' ' + H.toFixed(1) + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Profil en long des portions" font-family=\'' + TECH + '\' font-size="' + (nar ? 11.5 : 12.5) + '">';
+  o += svgDefs(pfx, c);
+  o += '<rect width="' + W + '" height="' + H.toFixed(1) + '" fill="' + c.bg + '"/>';
+  // terrain de part et d'autre
+  [[mL - 34, mL], [X(pr2[pr2.length-1].v1), X(pr2[pr2.length-1].v1) + 34]].forEach(function(r){
+    o += '<rect x="' + r[0] + '" y="' + Y(0) + '" width="' + (r[1]-r[0]) + '" height="' + (D*sy) + '" fill="url(#' + pfx + '-ht)" opacity=".7"/>';
+    o += '<line x1="' + r[0] + '" y1="' + Y(0) + '" x2="' + r[1] + '" y2="' + Y(0) + '" stroke="' + c.ink + '" stroke-width="1.6"/>';
+  });
+  pr2.forEach(function(p){
+    var x0 = X(p.v0), x1 = X(p.v1), w = x1 - x0;
+    if(p.e > 0) o += '<rect x="' + x0 + '" y="' + Y(0) + '" width="' + w + '" height="' + (p.e*sy) + '" fill="url(#' + pfx + '-hd)"/>';
+    o += '<rect x="' + x0 + '" y="' + Y(p.e) + '" width="' + w + '" height="' + ((p.P-p.e)*sy) + '" fill="' + c.terre + '" fill-opacity=".55"/>';
+    o += '<rect x="' + x0 + '" y="' + Y(0) + '" width="' + w + '" height="' + (p.P*sy) + '" fill="none" stroke="' + c.ink + '" stroke-width="1.6"/>';
+    if(p.e > 0) o += '<line x1="' + x0 + '" y1="' + Y(p.e) + '" x2="' + x1 + '" y2="' + Y(p.e) + '" stroke="' + c.ink + '" stroke-width="1" stroke-dasharray="4 3"/>';
+    // numéro + cotes
+    o += '<text x="' + ((x0+x1)/2) + '" y="' + (mT - 42) + '" text-anchor="middle" font-weight="700" fill="' + c.ink + '">Portion ' + p.no + '</text>';
+    o += svgDim([x0, Y(0)], [x1, Y(0)], [0,-1], 14, fmt(p.len) + ' m', c, pfx);
+    o += '<text x="' + ((x0+x1)/2) + '" y="' + ((Y(p.e) + Y(p.P))/2 + 4) + '" text-anchor="middle" font-weight="700" fill="' + c.ink + '" stroke="' + c.bg + '" stroke-width="4" paint-order="stroke">P ' + fmt(p.P) + ' m</text>';
+    if(p.e > 0) o += '<text x="' + ((x0+x1)/2) + '" y="' + ((Y(p.e) + Y(p.P))/2 + 20) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '" stroke="' + c.bg + '" stroke-width="4" paint-order="stroke">d\u00e9mol. ' + fmtCm(p.e) + '</text>';
+  });
+  o += '<text x="' + (mL - 40) + '" y="' + (Y(0) - 8) + '" text-anchor="end" font-size="11" fill="' + c.muted + '">niveau du sol</text>';
+  return o + '</svg>';
+}
 function renderPlans(g){
   var plan = $('plan'), cps = $('coupes');
   var c = palette(false);
   var pw = plan.clientWidth || 640;
   plan.innerHTML = planSVG(g, c, 'sp', clamp(pw, 340, 640));
   var cw = pw >= 640 && g.cuts.length > 1 ? pw/2 : pw;
-  cps.innerHTML = g.cuts.map(function(ct, i){
+  var html2 = '';
+  if(g.profile) html2 += '<figure><figcaption>Profil en long (' + g.prisms.length + ' portions)</figcaption>' + profilSVG(g, c, 'spf', clamp(pw, 340, 640)) + '</figure>';
+  html2 += g.cuts.map(function(ct, i){
     return '<figure><figcaption>' + esc(ct.title) + '</figcaption>' + coupeSVG(g, ct, c, 'sc' + i, clamp(cw, 340, 520)) + '</figure>';
   }).join('');
+  cps.innerHTML = html2;
 }
 
 /* ================= Photos : forme au sol (homographie) + tige ================= */
@@ -1328,7 +1713,7 @@ function defaultRod(p, g){
   }
   return {top:top, bot:[top[0], clamp(top[1] + 0.18*p.h, 0, p.h)]};
 }
-function handlesOf(p){ return p.pts.concat([p.rod.top, p.rod.bot]); }
+function handlesOf(p){ return p.rodOn ? p.pts.concat([p.rod.top, p.rod.bot]) : p.pts.slice(); }
 
 function drawShape(ctx, p, g, wp, lw){
   var pts = wp.outline;
@@ -1386,6 +1771,12 @@ function drawRod(ctx, p, g, lw){
   var nx = -uy, ny = ux;
   if(nx < 0){ nx = -nx; ny = -ny; }
   var e = g.e, D = g.type === 'T' ? (p.rodBranch === 'B' ? g.PB : g.PA) : g.Ptot;
+  if(g.prisms){
+    var selP = null;
+    g.prisms.forEach(function(pz){ if(String(pz.no) === String(p.rodBranch)) selP = pz; });
+    if(!selP) selP = g.prisms[0];
+    D = selP.P; e = selP.e;
+  }
   // partage linéaire à l'image (approximation : la perspective le long de la tige est négligée)
   var M = [T[0] + dx*e/D, T[1] + dy*e/D];
   var W = 8*lw;
@@ -1432,14 +1823,16 @@ function drawPhoto(ctx, p, g, withUI){
   var S = Math.max(p.w, p.h), lw = S/700;
   var wp = photoWarp(p, g);
   if(wp.ok) drawShape(ctx, p, g, wp, lw);
-  drawRod(ctx, p, g, lw);
+  if(p.rodOn) drawRod(ctx, p, g, lw);
   if(withUI && p.edit){
     var r = Math.max(14*lw, S/60);
     ctx.font = '700 ' + Math.round(r*1.0) + 'px ' + TECH;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     p.pts.forEach(function(q, i){ drawHandle(ctx, q, r, lw, 'rgba(242,183,5,0.55)', String(i+1)); });
-    drawHandle(ctx, p.rod.top, r, lw, 'rgba(255,255,255,0.6)', 'Sol');
-    drawHandle(ctx, p.rod.bot, r, lw, 'rgba(255,255,255,0.6)', 'Fond');
+    if(p.rodOn){
+      drawHandle(ctx, p.rod.top, r, lw, 'rgba(255,255,255,0.6)', 'Sol');
+      drawHandle(ctx, p.rod.bot, r, lw, 'rgba(255,255,255,0.6)', 'Fond');
+    }
     if(p.drag >= 0) drawLoupe(ctx, p, handlesOf(p)[p.drag], S);
   }
   return wp;
@@ -1515,12 +1908,13 @@ function photoCard(p){
       '<input type="text" class="ph-cap" placeholder="Légende (ex. vue depuis le trottoir)" aria-label="Légende de la photo">' +
       '<label class="check"><input type="checkbox" class="ph-proj"> Caler la fouille sur la photo</label>' +
       '<div class="ph-opts" hidden>' +
-        '<div class="ph-help"><div class="ph-schema"></div><p>1. Place les points 1 à <span class="ph-n">4</span> sur les angles de la fouille, au niveau du sol, dans n\'importe quel ordre sur la photo : la forme suit.<br>' +
-          '2. Pose la tige : glisse « Sol » où tu veux (la tige suit), puis tire « Fond » jusqu\'au fond visible de la fouille.</p></div>' +
+        '<div class="ph-help"><div class="ph-schema"></div><p>Place les points 1 à <span class="ph-n">4</span> sur les angles de la fouille, au niveau du sol, dans n\'importe quel ordre sur la photo : la forme suit.</p></div>' +
         '<div class="ph-row" style="margin-top:8px">' +
           '<button type="button" class="btn ph-edit">Ajuster</button>' +
-          '<button type="button" class="btn ph-reset">Replacer la forme et la tige</button>' +
+          '<button type="button" class="btn ph-reset">Replacer la forme</button>' +
         '</div>' +
+        '<label class="check ph-rodchk" style="margin-top:10px"><input type="checkbox" class="ph-rodon"> Ajouter la tige de profondeur</label>' +
+        '<p class="hint ph-rodhelp" hidden>Glisse « Sol » où tu veux (la tige suit), puis tire « Fond » jusqu\'au fond visible de la fouille.</p>' +
         '<div class="ph-row ph-branch" style="margin-top:8px" hidden>' +
           '<label>Tige sur la branche <select class="ph-rodb"><option value="A">A</option><option value="B">B</option></select></label>' +
         '</div>' +
@@ -1539,10 +1933,27 @@ function photoCard(p){
   var status = el.querySelector('.ph-status');
   cap.value = p.caption; chk.checked = p.proj; opts.hidden = !p.proj;
   alp.value = String(Math.round(p.alpha*100));
+  var rodOn = el.querySelector('.ph-rodon'), rodHelp = el.querySelector('.ph-rodhelp');
   var rodb = el.querySelector('.ph-rodb');
-  el.querySelector('.ph-branch').hidden = !(current && current.type === 'T');
+  var rowb = el.querySelector('.ph-branch');
+  rodOn.checked = !!p.rodOn;
+  rodHelp.hidden = !p.rodOn;
+  rowb.hidden = !(p.rodOn && current && (current.type === 'T' || current.prisms));
+  if(current && current.prisms){
+    rowb.querySelector('label').childNodes[0].nodeValue = 'Tige sur la portion ';
+    rodb.innerHTML = current.prisms.map(function(pz){ return '<option value="' + pz.no + '">' + pz.no + '</option>'; }).join('');
+    if(!p.rodBranch || p.rodBranch === 'A') p.rodBranch = '1';
+  }
   rodb.value = p.rodBranch || 'A';
   rodb.addEventListener('change', function(){ p.rodBranch = rodb.value; redraw(); });
+  rodOn.addEventListener('change', function(){
+    p.rodOn = rodOn.checked;
+    if(p.rodOn && current && !current.errs && !p.rod) p.rod = defaultRod(p, current);
+    rodHelp.hidden = !p.rodOn;
+    rowb.hidden = !(p.rodOn && current && (current.type === 'T' || current.prisms));
+    p.drag = -1;
+    redraw(); scheduleSave();
+  });
   el.querySelector('.ph-schema').innerHTML = current && !current.errs ? schemaSVG(current) : '';
   el.querySelector('.ph-n').textContent = current && current.corners ? current.corners.length : 4;
   // poignées d'une ancienne version (ex. T à 4 points) : on replace forme et tige
@@ -1557,7 +1968,7 @@ function photoCard(p){
     cvp.classList.toggle('editing', p.proj && p.edit);
     if(wp){
       status.textContent = wp.ok
-        ? 'Forme au sol calée sur les angles placés, quadrillage tous les 0,50 m. Tige réglée à la main : repère visuel, pas une mesure.'
+        ? 'Forme au sol calée sur les angles placés, quadrillage tous les 0,50 m.' + (p.rodOn ? ' Tige réglée à la main : repère visuel, pas une mesure.' : '')
         : wp.msg;
       status.classList.toggle('bad', !wp.ok);
     } else status.textContent = '';
@@ -1649,7 +2060,7 @@ function onPhotoFiles(){
   var input = this, failed = 0;
   Promise.all(files.map(function(f){
     return loadImage(f).then(function(r){
-      var ph = {id:++phSeq, img:r.img, w:r.w, h:r.h, data:r.data, caption:'', proj:false, edit:false, pts:null, rod:null, alpha:0.4, drag:-1};
+      var ph = {id:++phSeq, img:r.img, w:r.w, h:r.h, data:r.data, caption:'', proj:false, edit:false, pts:null, rod:null, rodOn:false, alpha:0.4, drag:-1};
       photos.push(ph);
       return savePhoto(ph);
     }).catch(function(){ failed++; });
@@ -1691,7 +2102,13 @@ function fouillePages(f, multi, head, chantierTable, obsTable, c){
     geo += row('Branche A : longueur / largeur', fmt(g.LA) + ' m / ' + fmt(g.wA) + ' m', 'n');
     geo += row('Branche B : longueur / largeur', fmt(g.LB) + ' m / ' + fmt(g.wB) + ' m', 'n');
   }
-  if(g.type === 'T'){ /* profondeurs déjà dans tRows */ }
+  if(g.prisms){
+    geo += row('Découpage', g.prisms.length + ' portions ' + (g.dir === 'y' ? 'dans la largeur' : 'dans la longueur'));
+    partRows(g).forEach(function(r){ geo += row(r[0], r[1]); });
+    geo += row('Profondeurs', depthShort(g), 'n');
+    geo += row('Démolition', g.e > 0 ? DEMO_MAT + ', ' + demoShort(g) + ', comprise dans chaque profondeur' : 'Aucune');
+  }
+  else if(g.type === 'T'){ /* profondeurs déjà dans tRows */ }
   else if(g.e > 0){
     geo += row('Profondeur totale mesurée', fmt(g.P) + ' m', 'n');
     geo += row('Démolition', DEMO_MAT + ', ' + fmtCm(g.e), 'n');
@@ -1725,6 +2142,7 @@ function fouillePages(f, multi, head, chantierTable, obsTable, c){
   html += '<h2>Vue 3D</h2><img class="r-3d" alt="Vue 3D de la fouille" src="' + img + '"></section>';
   html += '<section class="r-page">' + head((multi ? name + ', ' : '') + 'vues 2D') +
     '<h2>Vue de dessus</h2><div class="r-plan">' + planSVG(g, c, 'rp' + f.id) + '</div>' +
+    (g.profile ? '<h2>Profil en long</h2><div class="r-plan">' + profilSVG(g, c, 'rpf' + f.id, 640) + '</div>' : '') +
     '<h2>Coupes</h2><div class="r-coupes">' + g.cuts.map(function(ct, i){
       return '<figure><figcaption>' + esc(ct.title) + '</figcaption>' + coupeSVG(g, ct, c, 'rc' + f.id + '_' + i, 400) + '</figure>';
     }).join('') + '</div>' + notes + '</section>';
@@ -1737,7 +2155,7 @@ function fouillePages(f, multi, head, chantierTable, obsTable, c){
       drawPhoto(pc.getContext('2d'), p, g, false);
       var src = p.proj ? pc.toDataURL('image/jpeg', 0.85) : p.data;
       var cap = 'Photo ' + (i+k+1) + (p.caption.trim() ? ' : ' + esc(p.caption.trim()) : '');
-      if(p.proj) cap += '<br><span style="color:#5E6A72">Forme au sol calée sur les angles placés à la main (quadrillage 0,50 m) ; tige P / démolition réglée à la main (repère visuel).</span>';
+      if(p.proj) cap += '<br><span style="color:#5E6A72">Forme au sol calée sur les angles placés à la main (quadrillage 0,50 m)' + (p.rodOn ? ' ; tige P / démolition réglée à la main (repère visuel)' : '') + '.</span>';
       html += '<figure class="r-photo"><img src="' + src + '" alt="Photo ' + (i+k+1) + '"><figcaption>' + cap + '</figcaption></figure>';
     });
     html += '</section>';
@@ -1988,11 +2406,151 @@ function polySetLen(i, txt){
   pcv.addEventListener('pointercancel', end);
   pcv.addEventListener('lostpointercapture', end);
   $('poly-reset').addEventListener('click', function(){ polyInit(true); });
-  $('in-np').addEventListener('change', function(){ polyInit(false); });
+  var npT = null;
+  $('in-np').addEventListener('input', function(){ clearTimeout(npT); npT = setTimeout(function(){ polyInit(false); }, 450); });
+  $('in-np').addEventListener('change', function(){ clearTimeout(npT); polyInit(false); });
   window.addEventListener('resize', function(){
     if($('poly-box').hidden) return;
     polyFit(); polyDraw();
   });
+})();
+
+
+/* ================= Portions : interface ================= */
+var pstate = {on:false, dir:'x', parts:[]};
+function partCart(id, label, sub, field, i, unit, ro, demo){
+  return '<div class="cart side' + (demo ? ' demo' : '') + '" id="' + id + '">' +
+    '<label>' + label + '</label><span class="sub">' + sub + '</span>' +
+    '<div class="cart-in"><input type="text" inputmode="decimal" data-pf="' + field + '" data-pi="' + i + '"' +
+    (ro ? ' readonly tabindex="-1"' : '') + ' autocomplete="off"><span>' + unit + '</span></div>' +
+    (ro || field !== 'l' ? '' : '<button type="button" class="ar-btn" data-mode="distance" hidden>' +
+      '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">' +
+      '<rect x="2" y="7" width="20" height="10" rx="1.5"/><path d="M6 7v4M10 7v3M14 7v4M18 7v3"/></svg>Mesurer</button>') +
+    '</div>';
+}
+function partsBuild(){
+  var box = $('parts-list'), n = pstate.parts.length;
+  var unitLab = pstate.dir === 'y' ? 'Largeur' : 'Longueur';
+  if(box.childElementCount !== n){
+    // on ne recrée les cartouches que si leur nombre change : sinon un champ en cours
+    // de saisie serait remplacé sous le doigt
+    box.innerHTML = '';
+    pstate.parts.forEach(function(pt, i){
+      var last = i === n - 1;
+      var d = document.createElement('div');
+      d.className = 'part-blk';
+      d.innerHTML = '<h4>Portion ' + (i+1) + '</h4><div class="carts">' +
+        partCart('c-pt-l-' + i, unitLab, last ? 'le reste de l\u2019emprise' : 'de cette portion', 'l', i, 'm', last, false) +
+        partCart('c-pt-p-' + i, 'Profondeur P', 'depuis la surface', 'p', i, 'm', false, false) +
+        partCart('c-pt-e-' + i, 'D\u00e9molition', 'grave ciment, comprise dans P', 'e', i, 'cm', false, true) +
+        '</div>';
+      box.appendChild(d);
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('input[data-pf]'), function(inp){
+      if(inp.readOnly) return;
+      var i = Number(inp.getAttribute('data-pi')), f = inp.getAttribute('data-pf');
+      inp.addEventListener('input', function(){
+        var x = Number(String(inp.value).trim().replace(/\s/g, '').replace(',', '.'));
+        pstate.parts[i][f] = isFinite(x) ? x : 0;
+        inp.closest('.cart').classList.remove('bad');
+        $('input-errs').innerHTML = '';
+        partsSave(); partsSum();
+      });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('.ar-btn'), function(bt){
+      bt.hidden = !arVisible(); arBind(bt);
+    });
+  }
+  Array.prototype.forEach.call(box.querySelectorAll('.part-blk'), function(blk, i){
+    var lab = blk.querySelector('[id^="c-pt-l-"] label');
+    if(lab) lab.textContent = unitLab;
+    var sb = blk.querySelector('[id^="c-pt-l-"] .sub');
+    if(sb) sb.textContent = (i === n - 1) ? 'le reste de l\u2019emprise' : 'de cette portion';
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('input[data-pf]'), function(inp){
+    if(inp.readOnly || document.activeElement === inp) return;
+    var i = Number(inp.getAttribute('data-pi')), f = inp.getAttribute('data-pf');
+    var v = pstate.parts[i][f];
+    inp.value = v > 0 ? fmt(v, f === 'e' ? 0 : 2) : '';
+  });
+  partsSum();
+}
+// étendue de la fouille dans le sens du découpage, d'après les cotes déjà saisies
+function extentGuess(dir){
+  var t = state.type, ax = dir === 'y' ? 1 : 0;
+  function n2(id){ var v = num(id); return isFinite(v) && v > 0 ? v : 0; }
+  if(t === 'rect') return ax ? n2('in-b') : n2('in-a');
+  if(t === 'circle') return n2('in-a');
+  if(t === 'L') return ax ? n2('in-lb') : n2('in-a');
+  if(t === 'T') return ax ? (n2('in-b') + n2('in-lb')) : n2('in-a');
+  if(t === 'poly' && pedit.pts.length){
+    var vs = pedit.pts.map(function(q){ return q[ax]; });
+    return Math.max.apply(null, vs) - Math.min.apply(null, vs);
+  }
+  return 0;
+}
+function partsSum(){
+  var el = $('parts-sum'), n = pstate.parts.length, i, used = 0;
+  for(i = 0; i < n - 1; i++) used += pstate.parts[i].l;
+  var ext = extentGuess(pstate.dir), rest = ext - used;
+  var lastIn = $('parts-list').querySelector('input[data-pf="l"][data-pi="' + (n-1) + '"]');
+  if(lastIn) lastIn.value = (ext > 0 && rest > 0.001) ? fmt(rest) : '';
+  if(!(ext > 0)){
+    el.textContent = 'Saisis les cotes de la fouille : la ' + partLabel(pstate) + ' de la derni\u00e8re portion se calcule toute seule.';
+    el.className = 'part-sum';
+    return;
+  }
+  if(rest <= 0.02){
+    el.textContent = 'Emprise ' + fmt(ext) + ' m dans la ' + partLabel(pstate) + ' \u00b7 d\u00e9j\u00e0 saisi ' + fmt(used) + ' m : il ne reste rien pour la portion ' + n + '.';
+    el.className = 'part-sum bad';
+  } else {
+    el.textContent = 'Emprise ' + fmt(ext) + ' m \u00b7 saisi ' + fmt(used) + ' m \u00b7 portion ' + n + ' : ' + fmt(rest) + ' m.';
+    el.className = 'part-sum';
+  }
+}
+function partsSave(){
+  pstate.on = $('in-parts-on').checked;
+  pstate.dir = $('in-pdir').value === 'y' ? 'y' : 'x';
+  $('in-parts').value = JSON.stringify({on:pstate.on, dir:pstate.dir, parts:pstate.parts});
+  scheduleSave();
+}
+function partsLoad(){
+  var o = partsRead();
+  pstate = o ? {on:o.on, dir:o.dir, parts:o.parts} : {on:false, dir:'x', parts:[{l:0,p:0,e:0},{l:0,p:0,e:0}]};
+  while(pstate.parts.length < PARTMIN) pstate.parts.push({l:0, p:0, e:0});
+  if(state.type === 'T') pstate.on = false;
+  $('in-parts-on').checked = pstate.on;
+  $('in-pdir').value = pstate.dir;
+  $('in-pn').value = String(pstate.parts.length);
+  $('parts-cfg').hidden = !pstate.on;
+  partsBuild();
+}
+function partsCount(){
+  var el = $('in-pn');
+  var raw = Math.round(Number(String(el.value).replace(/[^0-9]/g, '')) || 0);
+  var n = clamp(raw >= PARTMIN ? raw : PARTMIN, PARTMIN, PARTMAX);
+  if(n === pstate.parts.length){
+    if(document.activeElement !== el && el.value !== String(n)) el.value = String(n);
+    return;
+  }
+  while(pstate.parts.length > n) pstate.parts.pop();
+  while(pstate.parts.length < n){
+    var lastP = pstate.parts[pstate.parts.length-1] || {l:0, p:0, e:0};
+    pstate.parts.push({l:0, p:lastP.p, e:lastP.e});
+  }
+  if(document.activeElement !== el) el.value = String(n);
+  partsSave(); partsBuild();
+}
+(function(){
+  $('in-parts-on').addEventListener('change', function(){
+    $('parts-cfg').hidden = !this.checked;
+    partsSave(); syncInput(); partsSum();
+    $('input-errs').innerHTML = '';
+  });
+  $('in-pdir').addEventListener('change', function(){ partsSave(); partsBuild(); });
+  var pnT = null;
+  $('in-pn').addEventListener('input', function(){ clearTimeout(pnT); pnT = setTimeout(partsCount, 450); });
+  $('in-pn').addEventListener('change', function(){ clearTimeout(pnT); partsCount(); });
 })();
 
 /* ================= Navigation / interface ================= */
@@ -2014,11 +2572,18 @@ function syncInput(){
   $('sub-lb').textContent = T ? 'depuis le bord de A' : 'branche B';
   $('lb-p').textContent = T ? 'Profondeur A' : 'Profondeur P';
   $('sub-p').textContent = T ? 'branche A, depuis la surface' : 'totale, depuis la surface';
+  var PR = $('in-parts-on').checked && !T;
+  $('parts-box').hidden = T;
+  if(T && $('in-parts-on').checked){ $('in-parts-on').checked = false; $('parts-cfg').hidden = true; partsSave(); }
+  $('c-p').hidden = PR; $('c-e').hidden = PR;
+  if(PR) $('c-pb').hidden = true;
   if(PY) polyInit(false);
+  if(PR) partsSum();
 }
 function loadInputs(f){
   FIELDS.forEach(function(id){ $(id).value = f.vals[id] || ''; });
   state.type = f.type; state.mode = 'incl';
+  partsLoad();
   $('input-errs').innerHTML = '';
   document.querySelectorAll('.cart').forEach(function(c){ c.classList.remove('bad'); });
   $('in-title').textContent = 'Fouille ' + fNum(f) + (f.g ? ' (modification)' : '');
@@ -2135,7 +2700,10 @@ window.addEventListener('beforeunload', function(ev){
 });
 $('type-select').addEventListener('change', function(){ state.type = this.value; syncInput(); });
 ['in-a','in-b','in-lb','in-wb','in-p','in-pb','in-e'].forEach(function(id){
-  $(id).addEventListener('input', function(){ $(id).closest('.cart').classList.remove('bad'); $('input-errs').innerHTML = ''; });
+  $(id).addEventListener('input', function(){
+    $(id).closest('.cart').classList.remove('bad'); $('input-errs').innerHTML = '';
+    if($('in-parts-on').checked) partsSum();
+  });
 });
 $('vex').addEventListener('change', function(){ state.vex = Number(this.value); draw3D(); });
 document.querySelectorAll('[data-view]').forEach(function(b){
@@ -2407,7 +2975,13 @@ function fouilleRows(f){
       ['Branche A : longueur / largeur', fmt(g.LA) + ' m / ' + fmt(g.wA) + ' m', {num:1}],
       ['Branche B : longueur / largeur', fmt(g.LB) + ' m / ' + fmt(g.wB) + ' m', {num:1}]);
   }
-  if(g.type === 'T'){ /* profondeurs déjà dans tRows */ }
+  if(g.prisms){
+    geo.push(['Découpage', g.prisms.length + ' portions ' + (g.dir === 'y' ? 'dans la largeur' : 'dans la longueur')]);
+    partRows(g).forEach(function(r){ geo.push([r[0], r[1]]); });
+    geo.push(['Profondeurs', depthShort(g), {num:1}],
+      ['Démolition', g.e > 0 ? DEMO_MAT + ', ' + demoShort(g) + ', comprise dans chaque profondeur' : 'Aucune']);
+  }
+  else if(g.type === 'T'){ /* profondeurs déjà dans tRows */ }
   else if(g.e > 0){
     geo.push(['Profondeur totale mesurée', fmt(g.P) + ' m', {num:1}], ['Démolition', DEMO_MAT + ', ' + fmtCm(g.e), {num:1}],
       ['Épaisseur de démolition', 'comprise dans la profondeur totale'], ['Profondeur fouille / totale', fmt(g.Pf) + ' m / ' + fmt(g.Ptot) + ' m', {num:1}]);
@@ -2417,6 +2991,7 @@ function fouilleRows(f){
   vol.push(['Emprise', fmt(g.area) + ' m²', {num:1}]);
   if(g.e > 0) vol.push(['Volume démolition', fmt(g.Vd, 3) + ' m³', {num:1}], ['Volume fouille', fmt(g.Vf, 3) + ' m³', {num:1}]);
   if(g.type === 'T') tVolRows(g).forEach(function(r){ vol.push([r[0], r[1], {num:1}]); });
+  if(g.prisms) g.prisms.forEach(function(pz){ vol.push(['Volume portion ' + pz.no, fmt(pz.area*pz.P, 3) + ' m³', {num:1}]); });
   vol.push(['Volume total en place', fmt(g.Vt, 3) + ' m³', {num:1, total:1}]);
   return {geo:geo, vol:vol};
 }
@@ -2463,7 +3038,8 @@ function buildPdfPages(progress){
       render3D(cv3.getContext('2d'), 1800, 1100, g, {az:state.az, el:state.el, vex:state.vex, k:2.2, print:true});
       doc.h2('Vue 3D');
       doc.image(cv3, PDF_H - PDF_M - doc.pg.y - 20);
-      return Promise.all([svgToImage(planSVG(g, c, 'pp' + f.id), 2)].concat(g.cuts.map(function(ct, i){
+      return Promise.all([svgToImage(planSVG(g, c, 'pp' + f.id), 2),
+        g.profile ? svgToImage(profilSVG(g, c, 'ppf' + f.id, 640), 2.4) : null].concat(g.cuts.map(function(ct, i){
         return svgToImage(coupeSVG(g, ct, c, 'pc' + f.id + '_' + i, 400), 2.5);
       })));
     }).then(function(imgs){
@@ -2471,8 +3047,12 @@ function buildPdfPages(progress){
       doc.newPage((multi ? name + ', ' : '') + 'vues 2D');
       doc.h2('Vue de dessus');
       doc.image(imgs[0], 760);
+      if(imgs[1]){
+        doc.h2('Profil en long (' + g.prisms.length + ' portions)');
+        doc.image(imgs[1], 620);
+      }
       doc.h2('Coupes');
-      var cuts = imgs.slice(1), n = cuts.length, gap = 24, cw = n === 1 ? (PDF_W - 2*PDF_M) * 0.55 : (PDF_W - 2*PDF_M - gap*(n - 1)) / n, top = doc.pg.y, maxBottom = top;
+      var cuts = imgs.slice(2), n = cuts.length, gap = 24, cw = n === 1 ? (PDF_W - 2*PDF_M) * 0.55 : (PDF_W - 2*PDF_M - gap*(n - 1)) / n, top = doc.pg.y, maxBottom = top;
       cuts.forEach(function(im, i){
         doc.pg.y = top;
         var x = doc.pg.x;
@@ -2496,7 +3076,7 @@ function buildPdfPages(progress){
         doc.image(pc, 640);
         var cap = ['Photo ' + (i + 1) + (p.caption.trim() ? ' : ' + p.caption.trim() : '')];
         doc.text(cap, 17, '#1E2830');
-        if(p.proj) doc.text(['Forme au sol calée sur les angles placés à la main (quadrillage 0,50 m) ; tige P / démolition réglée à la main (repère visuel).'], 14);
+        if(p.proj) doc.text(['Forme au sol calée sur les angles placés à la main (quadrillage 0,50 m)' + (p.rodOn ? ' ; tige P / démolition réglée à la main (repère visuel)' : '') + '.'], 14);
         doc.pg.y += 14;
       });
     });
@@ -3239,7 +3819,7 @@ function snapshot(){
       return {
         id:f.id, name:f.name, type:f.type, vals:f.vals, validated:!!f.g, draft:f.draft || null,
         photos: f.photos.map(function(p){
-          return {id:p.id, w:p.w, h:p.h, caption:p.caption, proj:p.proj, pts:p.pts, rod:p.rod, alpha:p.alpha, rodBranch:p.rodBranch || 'A'};
+          return {id:p.id, w:p.w, h:p.h, caption:p.caption, proj:p.proj, pts:p.pts, rod:p.rod, rodOn:!!p.rodOn, alpha:p.alpha, rodBranch:p.rodBranch || 'A'};
         })
       };
     })
@@ -3279,6 +3859,7 @@ function scheduleSave(){
 function applyDraft(d){
   FIELDS.forEach(function(id){ $(id).value = (d.vals && d.vals[id]) || ''; });
   state.type = d.type || 'rect';
+  partsLoad();
   syncInput();
 }
 function restore(){
@@ -3303,7 +3884,7 @@ function restore(){
           if(!data[sp.id]) return;
           phSeq = Math.max(phSeq, sp.id);
           var p = {id:sp.id, img:new Image(), w:sp.w, h:sp.h, data:data[sp.id], caption:sp.caption || '', proj:!!sp.proj,
-                   edit:false, pts:sp.pts || null, rod:sp.rod || null, alpha:sp.alpha || 0.4, drag:-1, rodBranch:sp.rodBranch || 'A'};
+                   edit:false, pts:sp.pts || null, rod:sp.rod || null, rodOn:!!sp.rodOn, alpha:sp.alpha || 0.4, drag:-1, rodBranch:sp.rodBranch || 'A'};
           if(p.proj && (!p.pts || !p.rod)) p.proj = false;
           loads.push(new Promise(function(r){ p.img.onload = r; p.img.onerror = r; }));
           p.img.src = p.data;
