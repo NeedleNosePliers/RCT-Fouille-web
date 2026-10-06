@@ -65,8 +65,19 @@ textarea{resize:vertical}
 .cart.demo{border-style:dashed}
 .ar-btn{margin-top:8px;align-self:flex-start;display:inline-flex;align-items:center;gap:6px;font:600 .9rem var(--tech);padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);cursor:pointer}
 .ar-btn svg{width:18px;height:18px}
+.mini-btn{margin-top:8px;align-self:flex-start;font:600 .9rem var(--tech);padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);cursor:pointer}
+.cart.side .ar-btn{margin-top:6px;padding:4px 8px;font-size:.82rem}
+.cart.side .ar-btn svg{width:15px;height:15px}
 .cart textarea{margin-top:6px;border:0;border-bottom:2px solid var(--line);border-radius:0;background:transparent;padding:4px 0;font:1rem/1.4 var(--body);min-height:4.2em}
 .cart textarea:focus{border-bottom-color:var(--tape);outline:none}
+.cart.side{padding:8px 10px 6px}
+.cart.side label{font-size:.88rem}
+.cart.side .sub{font-size:.72rem;min-height:1em}
+.cart.side .cart-in input{font-size:1.4rem}
+.cart.closing{border-style:dashed}
+.cart.closing .cart-in input{color:var(--muted)}
+#poly-cv{width:100%;height:320px;display:block;border:2px solid var(--ink);border-radius:10px;background:var(--panel);touch-action:none}
+#poly-sides{margin-top:10px}
 .comment{margin-top:12px;padding:10px 12px;border-left:4px solid var(--tape);background:var(--paper);border-radius:0 6px 6px 0}
 .comment h3{margin:0 0 4px;font:600 .95rem var(--tech);color:var(--muted)}
 .comment p{margin:0;white-space:normal;overflow-wrap:anywhere}
@@ -245,8 +256,23 @@ details.panel[open] summary{margin-bottom:12px}
         <option value="L">En L</option>
         <option value="T">En T</option>
         <option value="circle">Circulaire</option>
+        <option value="poly">Polygone (points libres)</option>
       </select>
     </div>
+
+    <div id="poly-head" class="carts" hidden style="margin-bottom:10px">
+      <div class="cart" id="c-np">
+        <label for="in-np">Nombre de points</label><span class="sub">contour fermé, 3 à 24</span>
+        <div class="cart-in"><input id="in-np" type="text" inputmode="numeric" placeholder="6" autocomplete="off"><span>pts</span></div>
+        <button type="button" class="mini-btn" id="poly-reset">Polygone régulier</button>
+      </div>
+    </div>
+    <div id="poly-box" hidden>
+      <canvas id="poly-cv" aria-label="Plan du contour : glisse les points"></canvas>
+      <p class="hint">Glisse les points sur le plan (quadrillage 0,50 m, pas de 5 cm) : les longueurs se recalculent. Tu peux aussi saisir une longueur dans une cartouche — le point suivant et la suite du contour se décalent, seule cette longueur change. Le dernier côté ferme le contour : il se calcule tout seul. Changer le nombre de points repart d’un polygone régulier. La profondeur P et la démolition s’appliquent à toute l’emprise : si une partie de la fouille est plus profonde, la saisir comme une fouille à part (le récapitulatif totalise les volumes).</p>
+      <div class="carts" id="poly-sides"></div>
+    </div>
+    <input type="hidden" id="in-poly">
 
     <div class="carts">
       <div class="cart" id="c-a">
@@ -398,7 +424,7 @@ details.panel[open] summary{margin-bottom:12px}
 <script>
 (function(){
 'use strict';
-var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '2.1';
+var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '2.2';
 var APP_LABEL = APP_NAME + ' Ver.' + APP_VERSION;
 var TECH = 'Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif';
 var BODY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -409,7 +435,7 @@ var MAXPH = 4, MAXPX = 1600;
 var state = {type:'rect', mode:'incl', az:-35, el:30, vex:1, step:'input'};
 var current = null;
 var fouilles = [], cur = -1, fSeq = 0;
-var FIELDS = ['in-name','in-a','in-b','in-lb','in-wb','in-p','in-pb','in-e','in-com'];
+var FIELDS = ['in-name','in-a','in-b','in-lb','in-wb','in-p','in-pb','in-e','in-com','in-np','in-poly'];
 function F(){ return fouilles[cur]; }
 function newFouille(prev){ return {id:++fSeq, name:'', type:'rect', mode:'incl', vals:{}, g:null, photos:[]}; }
 function doneList(){ return fouilles.filter(function(f){ return f.g; }); }
@@ -455,12 +481,124 @@ function rgba(hex, a){
   return 'rgba(' + ((n>>16)&255) + ',' + ((n>>8)&255) + ',' + (n&255) + ',' + a + ')';
 }
 
+/* ================= Polygone libre : géométrie ================= */
+var PMIN = 3, PMAX = 24, PSNAP = 0.05, PDEF = 6;
+function polyRound(v){ return Math.round(v/PSNAP)*PSNAP; }
+function regularPoly(n, R){
+  var a = [];
+  for(var i = 0; i < n; i++){
+    var th = Math.PI/2 + i*2*Math.PI/n; // sens trigonométrique : aire positive
+    a.push([polyRound(R + R*Math.cos(th)), polyRound(R + R*Math.sin(th))]);
+  }
+  return a;
+}
+function shoelace(pts){
+  var s2 = 0;
+  for(var i = 0; i < pts.length; i++){
+    var a = pts[i], b = pts[(i+1)%pts.length];
+    s2 += a[0]*b[1] - b[0]*a[1];
+  }
+  return s2/2;
+}
+function polyLens(pts){
+  var L = [];
+  for(var i = 0; i < pts.length; i++){
+    var a = pts[i], b = pts[(i+1)%pts.length];
+    L.push(Math.hypot(b[0]-a[0], b[1]-a[1]));
+  }
+  return L;
+}
+function polyCentroid(pts){
+  var A = shoelace(pts), n = pts.length, cx = 0, cy = 0, i;
+  if(Math.abs(A) < 1e-9){
+    for(i = 0; i < n; i++){ cx += pts[i][0]; cy += pts[i][1]; }
+    return [cx/n, cy/n];
+  }
+  for(i = 0; i < n; i++){
+    var a = pts[i], b = pts[(i+1)%n], f = a[0]*b[1] - b[0]*a[1];
+    cx += (a[0]+b[0])*f; cy += (a[1]+b[1])*f;
+  }
+  return [cx/(6*A), cy/(6*A)];
+}
+// deux segments se croisent-ils (hors extrémités communes, exclues par l'appelant)
+function segHit(a, b, c, d){
+  function cr(o, p, q){ return (p[0]-o[0])*(q[1]-o[1]) - (p[1]-o[1])*(q[0]-o[0]); }
+  var d1 = cr(a,b,c), d2 = cr(a,b,d), d3 = cr(c,d,a), d4 = cr(c,d,b);
+  if(((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0))) return true;
+  var eps = 1e-9;
+  function on(o, p, q){
+    return Math.abs(cr(o,p,q)) < eps &&
+      q[0] >= Math.min(o[0],p[0])-eps && q[0] <= Math.max(o[0],p[0])+eps &&
+      q[1] >= Math.min(o[1],p[1])-eps && q[1] <= Math.max(o[1],p[1])+eps;
+  }
+  return on(a,b,c) || on(a,b,d) || on(c,d,a) || on(c,d,b);
+}
+function polySelfCross(pts){
+  var n = pts.length;
+  for(var i = 0; i < n; i++){
+    for(var j = i+1; j < n; j++){
+      if(j === i+1 || (i === 0 && j === n-1)) continue; // côtés voisins
+      if(segHit(pts[i], pts[(i+1)%n], pts[j], pts[(j+1)%n])) return [i+1, j+1];
+    }
+  }
+  return null;
+}
+// origine du plan au coin bas-gauche de l'emprise (render3D suppose x,y >= 0)
+function polyNorm(pts){
+  var mnx = Math.min.apply(null, pts.map(function(q){ return q[0]; }));
+  var mny = Math.min.apply(null, pts.map(function(q){ return q[1]; }));
+  return pts.map(function(q){ return [q[0]-mnx, q[1]-mny]; });
+}
+// coupe horizontale : la corde intérieure la plus large (vraie largeur, même si concave)
+function polyCut(pts){
+  var n = pts.length, ys = [], i;
+  for(i = 0; i < n; i++) ys.push(pts[i][1]);
+  ys.push(polyCentroid(pts)[1]);
+  ys.sort(function(a,b){ return a-b; });
+  var cand = [], k;
+  for(k = 0; k + 1 < ys.length; k++) if(ys[k+1] - ys[k] > 1e-6) cand.push((ys[k]+ys[k+1])/2);
+  if(!cand.length) cand = [polyCentroid(pts)[1]];
+  var best = null;
+  cand.forEach(function(y0){
+    var xs = [];
+    for(var j = 0; j < n; j++){
+      var a = pts[j], b = pts[(j+1)%n];
+      if((a[1] > y0) === (b[1] > y0)) continue;
+      xs.push(a[0] + (b[0]-a[0])*(y0-a[1])/(b[1]-a[1]));
+    }
+    xs.sort(function(p,q){ return p-q; });
+    for(var m = 0; m + 1 < xs.length; m += 2){
+      if(!best || xs[m+1]-xs[m] > best.x1-best.x0) best = {y:y0, x0:xs[m], x1:xs[m+1]};
+    }
+  });
+  return best || {y:polyCentroid(pts)[1], x0:0, x1:0};
+}
+
 /* ================= Calculs ================= */
 function compute(){
   var t = state.type, errs = [], bad = [], g = {type:t};
   function need(v, label, id){ if(!(v > 0)){ errs.push(label + ' : saisir une valeur supérieure à 0.'); bad.push(id); } }
   var P = num('in-p');
-  if(t === 'circle'){
+  if(t === 'poly'){
+    var pp = polyRead();
+    if(!pp || pp.length < PMIN){
+      errs.push('Polygone : placer au moins ' + PMIN + ' points.'); bad.push('c-np');
+    } else if(pp.length > PMAX){
+      errs.push('Polygone : ' + PMAX + ' points au maximum.'); bad.push('c-np');
+    } else {
+      var pls = polyLens(pp), zero = -1;
+      pls.forEach(function(v, i){ if(v < 0.02 && zero < 0) zero = i; });
+      if(zero >= 0){
+        errs.push('Polygone : les points ' + (zero+1) + ' et ' + ((zero+1)%pp.length + 1) + ' sont confondus (côté nul).');
+        bad.push('c-np');
+      } else {
+        var XX = polySelfCross(pp);
+        if(XX){ errs.push('Polygone : le contour se croise (côtés ' + XX[0] + ' et ' + XX[1] + '). Déplacer les points.'); bad.push('c-np'); }
+        else if(Math.abs(shoelace(pp)) < 0.01){ errs.push('Polygone : emprise nulle, les points sont alignés.'); bad.push('c-np'); }
+      }
+      g.pts = pp;
+    }
+  } else if(t === 'circle'){
     g.D = num('in-a');
     need(g.D, 'Diamètre', 'c-a');
   } else if(t === 'rect'){
@@ -485,7 +623,31 @@ function compute(){
   if(errs.length) return {errs:errs, bad:bad};
 
   var poly, inner = [], dims, cuts, area, dTotal, dSplit, corners;
-  if(t === 'circle'){
+  if(t === 'poly'){
+    poly = polyNorm(g.pts);
+    var nP = poly.length;
+    g.ccw = shoelace(poly) >= 0 ? 1 : -1;
+    area = Math.abs(shoelace(poly));
+    g.lens = polyLens(poly);
+    g.per = g.lens.reduce(function(a2, b2){ return a2 + b2; }, 0);
+    g.cen = polyCentroid(poly);
+    dims = [];
+    for(var pi = 0; pi < nP; pi++){
+      var A0 = poly[pi], B0 = poly[(pi+1)%nP];
+      var ex = B0[0]-A0[0], ey = B0[1]-A0[1], el0 = Math.hypot(ex, ey) || 1;
+      dims.push({a:A0, b:B0, n:[g.ccw*ey/el0, -g.ccw*ex/el0],
+        label:(pi+1) + '–' + ((pi+1)%nP + 1) + ' : ' + fmt(el0) + ' m'});
+    }
+    g.dims3 = nP <= 6 ? dims : []; // au-delà, les cotes sont portées sur le plan seulement
+    var ct0 = polyCut(poly);
+    cuts = [{name:'A', title:'Coupe A-A (au plus large de l\'emprise)', w:Math.max(0.05, ct0.x1-ct0.x0),
+      a:[ct0.x0, ct0.y], b:[ct0.x1, ct0.y]}];
+    var iL = 0, iR = 0;
+    poly.forEach(function(q, i){ if(q[0] < poly[iL][0]) iL = i; if(q[0] > poly[iR][0]) iR = i; });
+    dTotal = {c:poly[iL], n:[-1,-1]}; dSplit = {c:poly[iR], n:[1,-1]};
+    corners = [];
+    for(pi = 0; pi < nP; pi++) corners.push(pi);
+  } else if(t === 'circle'){
     // cercle approché par un polygone régulier de 48 côtés : même rendu 3D, plan et coupe que les autres formes
     var R = g.D/2, N = 48;
     poly = [];
@@ -585,7 +747,13 @@ function depthText(g){
 function depthShort(g){
   return g.type === 'T' ? fmt(g.PA) + ' / ' + fmt(g.PB) + ' m' : fmt(g.Ptot) + ' m';
 }
+function polySideList(g){
+  return g.lens.map(function(v, i){
+    return (i+1) + '–' + ((i+1)%g.lens.length + 1) + ' : ' + fmt(v) + ' m';
+  }).join(' · ');
+}
 function dimsText(g){
+  if(g.type === 'poly') return 'polygone ' + g.poly.length + ' points, périmètre ' + fmt(g.per) + ' m';
   if(g.type === 'circle') return 'Ø ' + fmt(g.D) + ' m';
   if(g.type === 'T') return 'en T, A ' + fmt(g.LA) + ' × ' + fmt(g.wA) + ' / B ' + fmt(g.LB) + ' × ' + fmt(g.wB) + ' m';
   return g.type === 'rect'
@@ -760,7 +928,8 @@ function render3D(ctx, W, H, g, o){
   for(var i = 0; i < n && !boxes; i++){
     var p = poly[i], q = poly[(i+1)%n];
     var dx = q[0]-p[0], dy = q[1]-p[1], len = Math.hypot(dx,dy);
-    var nx = dy/len, ny = -dx/len;
+    var sgn = g.ccw || 1;
+    var nx = sgn*dy/len, ny = -sgn*dx/len;
     var n1x = nx*ca - ny*sa, n1y = nx*sa + ny*ca;
     if(-n1y*ce <= 1e-6) continue;
     walls.push({p:p, q:q, inner: g.inner.indexOf(i) >= 0 ? 1 : 0, f: 0.8 + 0.2*n1x});
@@ -784,7 +953,7 @@ function render3D(ctx, W, H, g, o){
 
   ctx.font = '600 ' + Math.round(fs*k) + 'px ' + TECH;
   var unit = maxD*0.2, off = 26*k;
-  g.dims.forEach(function(d){
+  (g.dims3 || g.dims).forEach(function(d){
     var A = S(d.a[0],d.a[1],0), B = S(d.b[0],d.b[1],0);
     var tx = B[0]-A[0], ty = B[1]-A[1], tl = Math.hypot(tx,ty);
     if(tl < 8*k) return;
@@ -912,14 +1081,37 @@ function planSVG(g, c, pfx, W){
   g.cuts.forEach(function(ct){
     var A = T(ct.a[0],ct.a[1]), B = T(ct.b[0],ct.b[1]);
     var dx = B[0]-A[0], dy = B[1]-A[1], l = Math.hypot(dx,dy) || 1; dx /= l; dy /= l;
-    var A1 = [A[0]-dx*16, A[1]-dy*16], B1 = [B[0]+dx*16, B[1]+dy*16];
+    var cex = g.type === 'poly' ? 34 : 16;
+    var A1 = [A[0]-dx*cex, A[1]-dy*cex], B1 = [B[0]+dx*cex, B[1]+dy*cex];
     o += '<line x1="' + A1[0] + '" y1="' + A1[1] + '" x2="' + B1[0] + '" y2="' + B1[1] + '" stroke="' + c.ink + '" stroke-width="1.2" stroke-dasharray="10 3 2 3"/>';
     o += '<text x="' + (A1[0]-dx*10) + '" y="' + (A1[1]-dy*10+4.5) + '" text-anchor="middle" font-weight="700" fill="' + c.ink + '">' + ct.name + '</text>';
     o += '<text x="' + (B1[0]+dx*10) + '" y="' + (B1[1]+dy*10+4.5) + '" text-anchor="middle" font-weight="700" fill="' + c.ink + '">' + ct.name + '</text>';
   });
+  if(g.type === 'poly'){
+    // cotes écrites le long de chaque côté, et numéro de chaque point
+    var C0 = T(g.cen[0], g.cen[1]);
+    g.poly.forEach(function(a, i){
+      var b = g.poly[(i+1)%g.poly.length], A = T(a[0],a[1]), B = T(b[0],b[1]);
+      var mx = (A[0]+B[0])/2, my = (A[1]+B[1])/2;
+      var ux = mx-C0[0], uy = my-C0[1], ul = Math.hypot(ux,uy) || 1;
+      var lx = mx + ux/ul*15, ly2 = my + uy/ul*15;
+      var ang = Math.atan2(B[1]-A[1], B[0]-A[0])*180/Math.PI;
+      if(ang > 90) ang -= 180; else if(ang < -90) ang += 180;
+      o += '<text x="' + lx.toFixed(1) + '" y="' + (ly2+4).toFixed(1) + '" text-anchor="middle" transform="rotate(' +
+        ang.toFixed(1) + ' ' + lx.toFixed(1) + ' ' + (ly2+4).toFixed(1) + ')" fill="' + c.ink + '" stroke="' + c.bg +
+        '" stroke-width="4" paint-order="stroke" font-weight="600">' + fmt(g.lens[i]) + '</text>';
+    });
+    g.poly.forEach(function(a, i){
+      var A = T(a[0],a[1]);
+      o += '<circle cx="' + A[0].toFixed(1) + '" cy="' + A[1].toFixed(1) + '" r="9" fill="#F2B705" stroke="' + c.ink + '" stroke-width="1.2"/>';
+      o += '<text x="' + A[0].toFixed(1) + '" y="' + (A[1]+3.6).toFixed(1) + '" text-anchor="middle" font-size="' +
+        (g.poly.length > 9 ? 9.5 : 11) + '" font-weight="700" fill="#1E2830">' + (i+1) + '</text>';
+    });
+  } else {
   g.dims.forEach(function(d){
     o += svgDim(T(d.a[0],d.a[1]), T(d.b[0],d.b[1]), [d.n[0], -d.n[1]], 34, d.label, c, pfx, undefined, {rotate:true});
   });
+  }
   var sl = niceLen(W*0.2/s), bx = W - 18 - sl*s, by = H - 16;
   o += '<g stroke="' + c.ink + '" stroke-width="1.2"><line x1="' + bx + '" y1="' + by + '" x2="' + (bx+sl*s) + '" y2="' + by + '"/>' +
        '<line x1="' + bx + '" y1="' + (by-4) + '" x2="' + bx + '" y2="' + (by+4) + '"/><line x1="' + (bx+sl*s) + '" y1="' + (by-4) + '" x2="' + (bx+sl*s) + '" y2="' + (by+4) + '"/></g>';
@@ -1003,6 +1195,33 @@ function homography(src, dst){
   if(!h || h.some(function(v){ return !isFinite(v); })) return null;
   return [[h[0],h[1],h[2]],[h[3],h[4],h[5]],[h[6],h[7],1]];
 }
+// N >= 4 correspondances : moindres carrés sur le système DLT (NᵀN h = Nᵀb)
+function homographyN(src, dst){
+  var n = Math.min(src.length, dst.length), i, j, k;
+  if(n < 4) return null;
+  if(n === 4) return homography(src, dst);
+  var A = [], b = [];
+  for(i = 0; i < n; i++){
+    var x = src[i][0], y = src[i][1], u = dst[i][0], v = dst[i][1];
+    A.push([x, y, 1, 0, 0, 0, -u*x, -u*y]); b.push(u);
+    A.push([0, 0, 0, x, y, 1, -v*x, -v*y]); b.push(v);
+  }
+  var M = [], r = [];
+  for(i = 0; i < 8; i++){
+    var rw = [];
+    for(j = 0; j < 8; j++){
+      var sm = 0;
+      for(k = 0; k < A.length; k++) sm += A[k][i]*A[k][j];
+      rw.push(sm);
+    }
+    var sb = 0;
+    for(k = 0; k < A.length; k++) sb += A[k][i]*b[k];
+    M.push(rw); r.push(sb);
+  }
+  var h = solve(M, r);
+  if(!h || h.some(function(w){ return !isFinite(w); })) return null;
+  return [[h[0],h[1],h[2]],[h[3],h[4],h[5]],[h[6],h[7],1]];
+}
 function convexQuad(q){
   var sign = 0;
   for(var i = 0; i < 4; i++){
@@ -1022,7 +1241,7 @@ function convexQuad(q){
 // L : 4 poignées, une seule transformation pour toute la forme.
 function partMap(p, world, img){
   var s = Math.max(p.w, p.h), cx = p.w/2, cy = p.h/2;
-  var H = homography(world, img.map(function(q){ return [(q[0]-cx)/s, (q[1]-cy)/s]; }));
+  var H = homographyN(world, img.map(function(q){ return [(q[0]-cx)/s, (q[1]-cy)/s]; }));
   if(!H) return null;
   return function(x, y){
     var w = H[2][0]*x + H[2][1]*y + H[2][2];
@@ -1041,6 +1260,16 @@ function photoWarp(p, g){
   if(!g || g.errs) return {ok:false, msg:'Cotes absentes.'};
   if(!p.pts || p.pts.length !== g.corners.length) return {ok:false, msg:'Points à replacer.'};
   var parts = [], outline, map = null;
+  if(g.type === 'poly'){
+    // une seule perspective ajustée sur tous les points (moindres carrés) ; le contour passe par les poignées
+    map = partMap(p, g.poly, p.pts);
+    if(!map) return {ok:false, msg:'Points alignés ou confondus : écarte-les.'};
+    var bx1 = Math.max.apply(null, g.poly.map(function(q){ return q[0]; }));
+    var by1 = Math.max.apply(null, g.poly.map(function(q){ return q[1]; }));
+    parts = [{r:[0, bx1, 0, by1], map:map}];
+    outline = p.pts.slice();
+    return {ok:true, map:map, parts:parts, outline:outline};
+  }
   if(g.type === 'circle'){
     // 4 repères sur le bord du cercle : droite, haut, gauche, bas
     map = partMap(p, g.corners.map(function(i){ return g.poly[i]; }), p.pts);
@@ -1073,6 +1302,17 @@ function photoWarp(p, g){
 }
 function defaultPts(p, g){
   var w = p.w, h = p.h;
+  if(g && g.type === 'poly'){
+    var bx = Math.max.apply(null, g.poly.map(function(q){ return q[0]; })) || 1;
+    var by = Math.max.apply(null, g.poly.map(function(q){ return q[1]; })) || 1;
+    var quad = [[0.18*w,0.88*h],[0.82*w,0.88*h],[0.70*w,0.42*h],[0.30*w,0.42*h]];
+    var H0 = homography([[0,0],[bx,0],[bx,by],[0,by]], quad);
+    if(H0) return g.poly.map(function(q){
+      var wd = H0[2][0]*q[0] + H0[2][1]*q[1] + H0[2][2];
+      return [(H0[0][0]*q[0]+H0[0][1]*q[1]+H0[0][2])/wd, (H0[1][0]*q[0]+H0[1][1]*q[1]+H0[1][2])/wd];
+    });
+    return g.poly.map(function(q){ return [0.2*w + q[0]/bx*0.6*w, 0.85*h - q[1]/by*0.45*h]; });
+  }
   if(g && g.type === 'L') return [[0.2*w,0.76*h],[0.8*w,0.76*h],[0.8*w,0.66*h],[0.3*w,0.66*h],[0.3*w,0.3*h],[0.2*w,0.3*h]];
   if(g && g.type === 'circle') return [[0.82*w,0.58*h],[0.5*w,0.36*h],[0.18*w,0.58*h],[0.5*w,0.86*h]];
   if(g && g.type === 'T') return [[0.15*w,0.8*h],[0.85*w,0.8*h],[0.85*w,0.68*h],[0.55*w,0.68*h],[0.55*w,0.3*h],[0.45*w,0.3*h],[0.45*w,0.68*h],[0.15*w,0.68*h]];
@@ -1082,7 +1322,7 @@ function defaultRod(p, g){
   var top = [p.w*0.5, p.h*0.55];
   var wp = photoWarp(p, g);
   if(wp.ok && wp.map){
-    var c = g.type === 'L' ? [g.LA*0.6, g.wA/2] : g.type === 'T' ? [g.LA*0.2, g.wA/2] : g.type === 'circle' ? [g.D/2, g.D/2] : [g.L/2, g.w/2];
+    var c = g.type === 'poly' ? [g.cen[0], g.cen[1]] : g.type === 'L' ? [g.LA*0.6, g.wA/2] : g.type === 'T' ? [g.LA*0.2, g.wA/2] : g.type === 'circle' ? [g.D/2, g.D/2] : [g.L/2, g.w/2];
     var m = wp.map(c[0], c[1]);
     top = [clamp(m[0], 0, p.w), clamp(m[1], 0, p.h)];
   }
@@ -1109,7 +1349,7 @@ function drawShape(ctx, p, g, wp, lw){
 var GRID = 0.5;
 function drawGrid(ctx, g, wp, lw){
   var clipped = false;
-  if(g.type === 'circle' && wp.outline){
+  if((g.type === 'circle' || g.type === 'poly') && wp.outline){
     // quadrillage limité au disque
     ctx.save(); clipped = true;
     ctx.beginPath();
@@ -1223,6 +1463,19 @@ function drawLoupe(ctx, p, pt, S){
 function schemaSVG(g){
   // schéma de principe (pas à l'échelle) : numéros des coins à pointer
   var W = 150, H = 110, poly;
+  if(g.type === 'poly'){
+    var bx2 = Math.max.apply(null, g.poly.map(function(q){ return q[0]; })) || 1;
+    var by2 = Math.max.apply(null, g.poly.map(function(q){ return q[1]; })) || 1;
+    var sc = Math.min(120/bx2, 86/by2), oxs = (150 - bx2*sc)/2, oys = (110 + by2*sc)/2;
+    var pq = g.poly.map(function(q){ return [oxs + q[0]*sc, oys - q[1]*sc]; });
+    var o4 = '<svg viewBox="0 0 150 110" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" font-family=\'' + TECH + '\' font-size="' + (g.poly.length > 9 ? 8.5 : 10) + '" font-weight="700">';
+    o4 += '<polygon points="' + pq.map(function(q){ return q[0].toFixed(1) + ',' + q[1].toFixed(1); }).join(' ') + '" fill="#B98A55" fill-opacity=".45" stroke="currentColor" stroke-width="1.5"/>';
+    pq.forEach(function(q, k){
+      o4 += '<circle cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="7" fill="#F2B705" stroke="#1E2830"/>';
+      o4 += '<text x="' + q[0].toFixed(1) + '" y="' + (q[1]+3).toFixed(1) + '" text-anchor="middle" fill="#1E2830">' + (k+1) + '</text>';
+    });
+    return o4 + '</svg>';
+  }
   if(g.type === 'circle'){
     var o2 = '<svg viewBox="0 0 150 110" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" font-family=\'' + TECH + '\' font-size="11" font-weight="700">';
     o2 += '<circle cx="75" cy="55" r="42" fill="#B98A55" fill-opacity=".45" stroke="currentColor" stroke-width="1.5"/>';
@@ -1425,6 +1678,10 @@ function fouillePages(f, multi, head, chantierTable, obsTable, c){
   var geo = '';
   if(g.type === 'T'){
     tRows(g).forEach(function(r){ geo += row(r[0], r[1], r[2] ? 'n' : ''); });
+  } else if(g.type === 'poly'){
+    geo += row('Forme', 'Polygone à ' + g.poly.length + ' points (contour fermé)');
+    geo += row('Périmètre', fmt(g.per) + ' m', 'n');
+    geo += row('Longueur des côtés', polySideList(g));
   } else if(g.type === 'circle'){
     geo += row('Forme', 'Circulaire') + row('Diamètre', fmt(g.D) + ' m', 'n');
   } else if(g.type === 'rect'){
@@ -1517,22 +1774,247 @@ function buildReport(){
   return true;
 }
 
+
+/* ================= Polygone libre : éditeur de plan ================= */
+var pedit = {pts:[], drag:-1, s:60, ox:0, oy:0, W:0, H:0, dpr:1};
+function polyRead(){
+  try{
+    var o = JSON.parse($('in-poly').value || 'null');
+    if(o && o.pts && o.pts.length >= PMIN){
+      var out = o.pts.map(function(q){ return [Number(q[0]), Number(q[1])]; });
+      if(out.every(function(q){ return isFinite(q[0]) && isFinite(q[1]); })) return out;
+    }
+  }catch(err){}
+  return null;
+}
+function polyStore(){
+  $('in-poly').value = JSON.stringify({pts:pedit.pts.map(function(q){
+    return [Math.round(q[0]*1000)/1000, Math.round(q[1]*1000)/1000];
+  })});
+  $('in-np').value = String(pedit.pts.length);
+  scheduleSave();
+}
+function polyInit(force){
+  var raw = Math.round(Number(String($('in-np').value).replace(/[^0-9]/g, '')) || 0);
+  var stored = polyRead();
+  var n = raw >= PMIN ? clamp(raw, PMIN, PMAX) : (stored ? stored.length : PDEF);
+  if(!force && stored && stored.length === n) pedit.pts = stored;
+  else {
+    // nombre de points modifié : on repart d'un polygone régulier de même étendue
+    var R = 1.5;
+    if(stored && stored.length >= PMIN){
+      var pl = polyLens(stored).reduce(function(a, b){ return a + b; }, 0);
+      R = clamp(pl/(2*n*Math.sin(Math.PI/n)), 0.3, 25);
+    }
+    pedit.pts = regularPoly(n, R);
+  }
+  pedit.drag = -1;
+  polyStore(); polyFit(); polySides(); polyDraw();
+}
+function polyFit(){
+  var cvp = $('poly-cv');
+  var rect = cvp.getBoundingClientRect();
+  var dpr = window.devicePixelRatio || 1;
+  var W = Math.max(280, Math.round((rect.width || 360)*dpr));
+  var H = Math.max(240, Math.round((rect.height || 320)*dpr));
+  if(cvp.width !== W || cvp.height !== H){ cvp.width = W; cvp.height = H; }
+  var xs = pedit.pts.map(function(q){ return q[0]; }), ys = pedit.pts.map(function(q){ return q[1]; });
+  var mnx = Math.min.apply(null, xs), mxx = Math.max.apply(null, xs);
+  var mny = Math.min.apply(null, ys), mxy = Math.max.apply(null, ys);
+  var pad = 48*dpr;
+  var sc = Math.min((W-2*pad)/Math.max(mxx-mnx, 0.4), (H-2*pad)/Math.max(mxy-mny, 0.4));
+  pedit.s = sc; pedit.dpr = dpr; pedit.W = W; pedit.H = H;
+  pedit.ox = (W - (mxx+mnx)*sc)/2;
+  pedit.oy = (H + (mxy+mny)*sc)/2;
+}
+function pT(q){ return [pedit.ox + q[0]*pedit.s, pedit.oy - q[1]*pedit.s]; }
+function pInv(x, y){ return [(x - pedit.ox)/pedit.s, (pedit.oy - y)/pedit.s]; }
+function polyFitIfNeeded(){
+  var W = pedit.W, H = pedit.H, dpr = pedit.dpr || 1;
+  var mnx = Infinity, mxx = -Infinity, mny = Infinity, mxy = -Infinity;
+  pedit.pts.forEach(function(q){
+    var a = pT(q);
+    mnx = Math.min(mnx, a[0]); mxx = Math.max(mxx, a[0]);
+    mny = Math.min(mny, a[1]); mxy = Math.max(mxy, a[1]);
+  });
+  var pad = 30*dpr;
+  var tooBig = mnx < pad || mny < pad || mxx > W - pad || mxy > H - pad;
+  var tooSmall = (mxx-mnx) < 0.3*W && (mxy-mny) < 0.3*H;
+  if(tooBig || tooSmall) polyFit();
+}
+function polyDraw(){
+  var cvp = $('poly-cv');
+  if(!cvp || $('poly-box').hidden) return;
+  if(!pedit.W) polyFit();
+  var ctx = cvp.getContext('2d'), W = pedit.W, H = pedit.H, dpr = pedit.dpr || 1;
+  var c = palette(false), pts = pedit.pts;
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = c.bg; ctx.fillRect(0,0,W,H);
+  // quadrillage 0,50 m
+  ctx.strokeStyle = rgba('#9AA39A', 0.55); ctx.lineWidth = Math.max(1, 0.8*dpr);
+  ctx.beginPath();
+  var k, x, y;
+  for(k = Math.ceil(pInv(0,0)[0]/GRID); k*GRID <= pInv(W,0)[0]; k++){
+    x = pT([k*GRID, 0])[0]; ctx.moveTo(x, 0); ctx.lineTo(x, H);
+  }
+  for(k = Math.ceil(pInv(0,H)[1]/GRID); k*GRID <= pInv(0,0)[1]; k++){
+    y = pT([0, k*GRID])[1]; ctx.moveTo(0, y); ctx.lineTo(W, y);
+  }
+  ctx.stroke();
+  // contour
+  var cross = polySelfCross(pts);
+  ctx.beginPath();
+  pts.forEach(function(q, i){ var a = pT(q); if(i) ctx.lineTo(a[0], a[1]); else ctx.moveTo(a[0], a[1]); });
+  ctx.closePath();
+  ctx.fillStyle = rgba(cross ? '#C0392B' : '#B98A55', 0.35); ctx.fill();
+  ctx.strokeStyle = cross ? '#C0392B' : c.ink; ctx.lineWidth = 2.4*dpr; ctx.lineJoin = 'round'; ctx.stroke();
+  // longueurs des côtés
+  var L = polyLens(pts), cen = pT(polyCentroid(pts));
+  ctx.font = '600 ' + Math.round(12.5*dpr) + 'px ' + TECH;
+  pts.forEach(function(q, i){
+    var b = pts[(i+1)%pts.length], A = pT(q), B = pT(b);
+    var mx = (A[0]+B[0])/2, my = (A[1]+B[1])/2;
+    var ux = mx-cen[0], uy = my-cen[1], ul = Math.hypot(ux, uy) || 1;
+    labelBox(ctx, fmt(L[i]), mx + ux/ul*18*dpr, my + uy/ul*18*dpr, 'center', c, dpr);
+  });
+  // points
+  ctx.font = '700 ' + Math.round(13*dpr) + 'px ' + TECH;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  pts.forEach(function(q, i){
+    var a = pT(q), r = 13*dpr;
+    ctx.beginPath(); ctx.arc(a[0], a[1], r, 0, Math.PI*2);
+    ctx.fillStyle = i === pedit.drag ? '#F2B705' : 'rgba(242,183,5,0.78)'; ctx.fill();
+    ctx.strokeStyle = '#1E2830'; ctx.lineWidth = 2*dpr; ctx.stroke();
+    ctx.fillStyle = '#1E2830'; ctx.fillText(String(i+1), a[0], a[1] + 0.5*dpr);
+  });
+  // emprise + échelle
+  var ar = Math.abs(shoelace(pts));
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.font = '600 ' + Math.round(12*dpr) + 'px ' + TECH;
+  ctx.fillStyle = c.muted;
+  ctx.fillText('Emprise ' + fmt(ar) + ' m² · périmètre ' + fmt(L.reduce(function(a,b){ return a+b; }, 0)) + ' m', 8*dpr, 7*dpr);
+  if(cross){
+    ctx.fillStyle = '#C0392B';
+    ctx.fillText('Contour croisé : côtés ' + cross[0] + ' et ' + cross[1], 8*dpr, 24*dpr);
+  }
+  var sl = niceLen(W*0.22/pedit.s), bx = W - 14*dpr - sl*pedit.s, by = H - 14*dpr;
+  ctx.strokeStyle = c.ink; ctx.lineWidth = 1.4*dpr;
+  ctx.beginPath();
+  ctx.moveTo(bx, by); ctx.lineTo(bx + sl*pedit.s, by);
+  ctx.moveTo(bx, by-4*dpr); ctx.lineTo(bx, by+4*dpr);
+  ctx.moveTo(bx + sl*pedit.s, by-4*dpr); ctx.lineTo(bx + sl*pedit.s, by+4*dpr);
+  ctx.stroke();
+  ctx.fillStyle = c.muted; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.fillText(fmt(sl, sl < 1 ? 1 : 0) + ' m', bx + sl*pedit.s/2, by - 5*dpr);
+}
+function polySides(){
+  var box = $('poly-sides'), n = pedit.pts.length, L = polyLens(pedit.pts), i;
+  if(box.childElementCount !== n){
+    box.innerHTML = '';
+    for(i = 0; i < n; i++){
+      var last = i === n-1;
+      var d = document.createElement('div');
+      d.className = 'cart side' + (last ? ' closing' : '');
+      d.innerHTML = '<label>Côté ' + (i+1) + '–' + ((i+1)%n + 1) + '</label>' +
+        '<span class="sub">' + (last ? 'fermeture, calculée' : 'longueur') + '</span>' +
+        '<div class="cart-in"><input type="text" inputmode="decimal" data-side="' + i + '"' +
+        (last ? ' readonly tabindex="-1"' : '') + ' autocomplete="off"><span>m</span></div>' +
+        (last ? '' : '<button type="button" class="ar-btn" data-mode="distance" hidden>' +
+          '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">' +
+          '<rect x="2" y="7" width="20" height="10" rx="1.5"/><path d="M6 7v4M10 7v3M14 7v4M18 7v3"/></svg>Mesurer</button>');
+      box.appendChild(d);
+    }
+    Array.prototype.forEach.call(box.querySelectorAll('input[data-side]'), function(inp){
+      if(inp.readOnly) return;
+      inp.addEventListener('change', function(){ polySetLen(Number(inp.getAttribute('data-side')), inp.value); });
+      inp.addEventListener('keydown', function(ev){ if(ev.key === 'Enter'){ ev.preventDefault(); inp.blur(); } });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('.ar-btn'), function(bt){
+      bt.hidden = !arVisible(); arBind(bt);
+    });
+  }
+  Array.prototype.forEach.call(box.querySelectorAll('input[data-side]'), function(inp){
+    if(document.activeElement === inp) return;
+    inp.value = fmt(L[Number(inp.getAttribute('data-side'))]);
+  });
+}
+// saisir une longueur : le point suivant et toute la suite du contour se décalent,
+// donc seules cette longueur et la fermeture changent.
+function polySetLen(i, txt){
+  var n = pedit.pts.length;
+  var v = Number(String(txt).trim().replace(/\s/g, '').replace(',', '.'));
+  if(!(v > 0.02) || i >= n-1){ polySides(); polyDraw(); return; }
+  var a = pedit.pts[i], b = pedit.pts[i+1];
+  var dx = b[0]-a[0], dy = b[1]-a[1], l = Math.hypot(dx, dy);
+  if(l < 1e-6){ polySides(); polyDraw(); return; }
+  var kx = (v/l - 1)*dx, ky = (v/l - 1)*dy;
+  for(var j = i+1; j < n; j++) pedit.pts[j] = [polyRound(pedit.pts[j][0] + kx), polyRound(pedit.pts[j][1] + ky)];
+  polyStore(); polyFitIfNeeded(); polySides(); polyDraw();
+  $('input-errs').innerHTML = ''; $('c-np').classList.remove('bad');
+}
+(function(){
+  var pcv = $('poly-cv');
+  function xy(ev){
+    var r = pcv.getBoundingClientRect();
+    return [(ev.clientX - r.left)*pcv.width/(r.width || 1), (ev.clientY - r.top)*pcv.height/(r.height || 1)];
+  }
+  pcv.addEventListener('pointerdown', function(ev){
+    var m = xy(ev), best = -1, bd = 30*(pedit.dpr || 1);
+    pedit.pts.forEach(function(q, i){
+      var a = pT(q), d = Math.hypot(a[0]-m[0], a[1]-m[1]);
+      if(d < bd){ bd = d; best = i; }
+    });
+    if(best < 0) return;
+    pedit.drag = best;
+    try{ pcv.setPointerCapture(ev.pointerId); }catch(err){}
+    ev.preventDefault();
+    polyDraw();
+  });
+  pcv.addEventListener('pointermove', function(ev){
+    if(pedit.drag < 0) return;
+    var m = xy(ev), w = pInv(m[0], m[1]);
+    pedit.pts[pedit.drag] = [polyRound(w[0]), polyRound(w[1])];
+    polySides(); polyDraw();
+    ev.preventDefault();
+  });
+  function end(){
+    if(pedit.drag < 0) return;
+    pedit.drag = -1;
+    polyStore(); polyFitIfNeeded(); polySides(); polyDraw();
+    $('input-errs').innerHTML = ''; $('c-np').classList.remove('bad');
+  }
+  pcv.addEventListener('pointerup', end);
+  pcv.addEventListener('pointercancel', end);
+  pcv.addEventListener('lostpointercapture', end);
+  $('poly-reset').addEventListener('click', function(){ polyInit(true); });
+  $('in-np').addEventListener('change', function(){ polyInit(false); });
+  window.addEventListener('resize', function(){
+    if($('poly-box').hidden) return;
+    polyFit(); polyDraw();
+  });
+})();
+
 /* ================= Navigation / interface ================= */
 function syncInput(){
   var T = state.type === 'T';
   var C = state.type === 'circle';
+  var PY = state.type === 'poly';
   var L = (state.type === 'L' || T);
   $('type-select').value = state.type;
+  $('poly-head').hidden = !PY; $('poly-box').hidden = !PY;
+  $('c-a').hidden = PY;
   $('lb-a').textContent = C ? 'Diamètre Ø' : (L ? 'Longueur A' : 'Longueur');
   $('lb-b').textContent = L ? 'Largeur A' : 'Largeur';
   $('sub-a').textContent = C ? 'au niveau du sol' : (L ? 'branche A' : '');
   $('sub-b').textContent = L ? 'branche A' : '';
-  $('c-b').hidden = C;
+  $('c-b').hidden = C || PY;
   $('c-lb').hidden = !L; $('c-wb').hidden = !L; $('hint-L').hidden = state.type !== 'L';
   $('hint-T').hidden = !T; $('c-pb').hidden = !T;
   $('sub-lb').textContent = T ? 'depuis le bord de A' : 'branche B';
   $('lb-p').textContent = T ? 'Profondeur A' : 'Profondeur P';
   $('sub-p').textContent = T ? 'branche A, depuis la surface' : 'totale, depuis la surface';
+  if(PY) polyInit(false);
 }
 function loadInputs(f){
   FIELDS.forEach(function(id){ $(id).value = f.vals[id] || ''; });
@@ -1578,6 +2060,7 @@ function showStep(step){
   if(step !== 'result') $('mail-ready').hidden = true;
   $('pdf-msg').hidden = step !== 'result';
   window.scrollTo(0, 0);
+  if(step === 'input' && state.type === 'poly'){ polyFit(); polyDraw(); }
   if(step === 'result'){
     renderFouilleBar();
     $('sw-demo').style.background = palette(false).demo;
@@ -1911,6 +2394,10 @@ function fouilleRows(f){
   var g = f.g, geo = [], vol = [];
   if(g.type === 'T'){
     tRows(g).forEach(function(r){ geo.push([r[0], r[1], r[2] ? {num:1} : null]); });
+  } else if(g.type === 'poly'){
+    geo.push(['Forme', 'Polygone à ' + g.poly.length + ' points (contour fermé)'],
+      ['Périmètre', fmt(g.per) + ' m', {num:1}],
+      ['Longueur des côtés', polySideList(g)]);
   } else if(g.type === 'circle'){
     geo.push(['Forme', 'Circulaire'], ['Diamètre', fmt(g.D) + ' m', {num:1}]);
   } else if(g.type === 'rect'){
@@ -2494,9 +2981,9 @@ function initAr(){
     }).catch(function(){});
   })();
 }
-document.querySelectorAll('.ar-btn').forEach(function(b){
+function arBind(b){
   b.addEventListener('click', function(){
-    var input = $(b.dataset.target);
+    var input = b.dataset.target ? $(b.dataset.target) : b.closest('.cart').querySelector('input');
     var label = b.closest('.cart').querySelector('label').textContent;
     var measure = isApp()
       ? window.Capacitor.nativePromise('ArMeasure', 'measure', {mode:b.dataset.mode, title:label})
@@ -2509,13 +2996,16 @@ document.querySelectorAll('.ar-btn').forEach(function(b){
       if(!(r.value > 0)) return;
       input.value = fmt(r.value, 2).replace(/\s/g, '');
       input.dispatchEvent(new Event('input', {bubbles:true}));
+      input.dispatchEvent(new Event('change', {bubbles:true}));
       $('ar-hint').textContent = label + ' mesurée à la caméra : ' + fmt(r.value, 2) + ' m'
         + (b.dataset.mode === 'vertical' ? ' (écart vertical)' : '') + '. Valeur approximative, à vérifier au mètre.';
     }).catch(function(err){
       arError('Mesure impossible : ' + ((err && err.message) || err));
     });
   });
-});
+}
+function arVisible(){ return arReady && isAdmin; }
+document.querySelectorAll('.ar-btn').forEach(arBind);
 showArButtons(false);
 initAr();
 
