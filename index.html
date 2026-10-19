@@ -94,6 +94,8 @@ textarea{resize:vertical}
 #sides-schema svg{width:100%;height:auto;border:1px solid var(--line);border-radius:8px;display:block}
 .side-head .zn{width:3.2em;border:0;border-bottom:2px solid var(--line);background:transparent;color:var(--ink);font:600 1rem var(--tech);padding:2px 0}
 .side-head .zn:focus{border-bottom-color:var(--tape);outline:none}
+.check.nodraw{font:600 .86rem var(--tech);gap:7px;white-space:nowrap}
+.check.nodraw input{width:19px;height:19px}
 .essai-tag{display:inline-block;background:var(--err);color:#fff;font:700 .72rem var(--tech);padding:2px 7px;border-radius:4px;letter-spacing:.06em;vertical-align:middle;margin-left:8px}
 .cart textarea{margin-top:6px;border:0;border-bottom:2px solid var(--line);border-radius:0;background:transparent;padding:4px 0;font:1rem/1.4 var(--body);min-height:4.2em}
 .cart textarea:focus{border-bottom-color:var(--tape);outline:none}
@@ -478,6 +480,7 @@ details.panel[open] summary{margin-bottom:12px}
   <button type="button" class="primary" id="pdf" hidden>Exporter en PDF</button>
   <button type="button" class="primary secondary" id="mail" hidden>Envoyer par email</button>
   <button type="button" class="primary" id="mail-ready" hidden>Envoyer le PDF prêt</button>
+  <label class="check nodraw" id="nodraw-row" hidden><input type="checkbox" id="no-draw"> PDF sans les dessins</label>
   <span id="pdf-msg" role="status" hidden>Dans la fenêtre d'impression, choisir « Enregistrer en PDF ».</span>
 </div>
 
@@ -486,7 +489,7 @@ details.panel[open] summary{margin-bottom:12px}
 <script>
 (function(){
 'use strict';
-var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '2.8';
+var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '2.9';
 var APP_LABEL = APP_NAME + ' Ver.' + APP_VERSION;
 var TECH = 'Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif';
 var BODY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -2178,11 +2181,13 @@ function row(label, val, cls){
   return '<tr><th>' + label + '</th><td' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</td></tr>';
 }
 function fouillePages(f, multi, head, chantierTable, obsTable, c){
-  var g = f.g;
-  var cvs = document.createElement('canvas');
-  cvs.width = 1800; cvs.height = 1100;
-  render3D(cvs.getContext('2d'), 1800, 1100, g, {az:state.az, el:state.el, vex:state.vex, k:2.2, print:true});
-  var img = cvs.toDataURL('image/png');
+  var g = f.g, img = null;
+  if(!noDraw()){
+    var cvs = document.createElement('canvas');
+    cvs.width = 1800; cvs.height = 1100;
+    render3D(cvs.getContext('2d'), 1800, 1100, g, {az:state.az, el:state.el, vex:state.vex, k:2.2, print:true});
+    img = cvs.toDataURL('image/png');
+  }
   var geo = '';
   if(g.type === 'T'){
     tRows(g).forEach(function(r){ geo += row(r[0], r[1], r[2] ? 'n' : ''); });
@@ -2237,6 +2242,9 @@ function fouillePages(f, multi, head, chantierTable, obsTable, c){
       '<div><h2>Géométrie</h2><table>' + geo + '</table></div></div>' + obsTable + comTable +
       '<h2>Volumes</h2><table>' + vol + '</table>';
   }
+  if(noDraw()){
+    html += notes + '</section>';
+  } else {
   html += '<h2>Vue 3D</h2><img class="r-3d" alt="Vue 3D de la fouille" src="' + img + '"></section>';
   html += '<section class="r-page">' + head((multi ? name + ', ' : '') + 'vues 2D') +
     '<h2>Vue de dessus</h2><div class="r-plan">' + planSVG(g, c, 'rp' + f.id) + '</div>' +
@@ -2250,6 +2258,7 @@ function fouillePages(f, multi, head, chantierTable, obsTable, c){
     '<h2>Coupes</h2><div class="r-coupes">' + g.cuts.map(function(ct, i){
       return '<figure><figcaption>' + esc(ct.title) + '</figcaption>' + coupeSVG(g, ct, c, 'rc' + f.id + '_' + i, 400) + '</figure>';
     }).join('') + '</div>' + notes + '</section>';
+  }
 
   var photos = f.photos;
   for(var i = 0; i < photos.length; i += 2){
@@ -3139,6 +3148,7 @@ function showStep(step){
   $('mail').hidden = step !== 'result';
   if(step !== 'result') $('mail-ready').hidden = true;
   $('pdf-msg').hidden = step !== 'result';
+  $('nodraw-row').hidden = step !== 'result';
   window.scrollTo(0, 0);
   if(step === 'input' && state.type === 'poly'){ polyFit(); polyDraw(); }
   if(step === 'result'){
@@ -3281,9 +3291,10 @@ function printReport(){
   }
 }
 function pdfHint(){
-  return isApp()
+  var base = isApp()
     ? 'Dans la fenêtre d\'impression, choisir l\'imprimante « Enregistrer au format PDF ».'
     : 'Dans la fenêtre d\'impression, choisir « Enregistrer en PDF ».';
+  return base + (noDraw() ? ' PDF sans les dessins : tableaux et photos seulement.' : '');
 }
 $('pdf').addEventListener('click', function(){
   var msg = $('pdf-msg');
@@ -3534,11 +3545,25 @@ function buildPdfPages(progress){
   var chantier = [['N° d\'affaire', aff], ['Date du relevé', dte], ['Adresse', val('adresse')], ['Commune', val('commune')],
     ['Entreprise', val('entreprise')], ['Rédacteur', val('redacteur')], ['Observations', val('obs')]];
   var notesBase = ['Volumes en place, non foisonnés, calculés à partir des cotes relevées sur le terrain.'];
+  // photos d'une fouille, deux par page
+  function phPages(f, g, name, multi){
+    f.photos.forEach(function(p, i){
+      if(i % 2 === 0) doc.newPage((multi ? name + ', ' : '') + 'photos');
+      var pc = document.createElement('canvas'); pc.width = p.w; pc.height = p.h;
+      drawPhoto(pc.getContext('2d'), p, g, false);
+      doc.image(pc, 640);
+      doc.text(['Photo ' + (i + 1) + (p.caption.trim() ? ' : ' + p.caption.trim() : '')], 17, '#1E2830');
+      if(p.proj) doc.text(['Forme au sol calée sur les angles placés à la main (quadrillage 0,50 m)' + (p.rodOn ? ' ; tige P / démolition réglée à la main (repère visuel)' : '') + '.'], 14);
+      doc.pg.y += 14;
+    });
+  }
   if(multi){
     doc.newPage('récapitulatif');
     doc.h2('Chantier'); doc.table(chantier);
     doc.h2('Fouilles (' + list.length + ')'); doc.recap(list);
-    doc.text(notesBase.concat(['Le détail de chaque fouille (géométrie, vue 3D, plan, coupes, photos) suit ce récapitulatif.']), 15);
+    doc.text(notesBase.concat([noDraw()
+      ? 'Le détail de chaque fouille (géométrie, volumes, photos) suit ce récapitulatif.'
+      : 'Le détail de chaque fouille (géométrie, vue 3D, plan, coupes, photos) suit ce récapitulatif.']), 15);
   }
   var chain = Promise.resolve();
   list.forEach(function(f, fi){
@@ -3561,11 +3586,14 @@ function buildPdfPages(progress){
       doc.table(rows.vol, xr, half, 0.55);
       pg0.y = Math.max(yL, pg0.y);
       if(com){ doc.table([['Commentaire', com]], PDF_M, null, 0.25); }
-      var cv3 = document.createElement('canvas');
-      cv3.width = 1800; cv3.height = 1100;
-      render3D(cv3.getContext('2d'), 1800, 1100, g, {az:state.az, el:state.el, vex:state.vex, k:2.2, print:true});
-      doc.h2('Vue 3D');
-      doc.image(cv3, PDF_H - PDF_M - doc.pg.y - 20);
+      if(!noDraw()){
+        var cv3 = document.createElement('canvas');
+        cv3.width = 1800; cv3.height = 1100;
+        render3D(cv3.getContext('2d'), 1800, 1100, g, {az:state.az, el:state.el, vex:state.vex, k:2.2, print:true});
+        doc.h2('Vue 3D');
+        doc.image(cv3, PDF_H - PDF_M - doc.pg.y - 20);
+      }
+      if(noDraw()) return Promise.resolve([]);
       var elv = sstate.on ? sidesOf(g) : [];
       return Promise.all([svgToImage(planSVG(g, c, 'pp' + f.id), 2),
         g.profile ? svgToImage(profilSVG(g, c, 'ppf' + f.id, 640), 2.4) : null]
@@ -3575,6 +3603,15 @@ function buildPdfPages(progress){
         .concat(elv.map(function(sd, i){ return svgToImage(elevSVG(g, sd, c, 'pel' + f.id + '_' + i, 600, elevScale(elv, 600, 120, 58)), 2.2); })));
     }).then(function(imgs){
       var g = f.g, name = fLabel(f);
+      if(!imgs.length){
+        // PDF sans les dessins : on referme par les notes, puis les photos
+        var nt = notesBase.slice();
+        nt.push('PDF sans les dessins : vue 3D, plan, coupes et élévations volontairement omis.');
+        nt.push('Document généré avec ' + APP_LABEL + '.');
+        doc.text(nt, 15);
+        phPages(f, g, name, multi);
+        return;
+      }
       doc.newPage((multi ? name + ', ' : '') + 'vues 2D');
       doc.h2('Vue de dessus');
       doc.image(imgs[0], 760);
@@ -3624,17 +3661,7 @@ function buildPdfPages(progress){
           doc.pg.y += 10;
         });
       }
-      // photos, 2 par page
-      f.photos.forEach(function(p, i){
-        if(i % 2 === 0) doc.newPage((multi ? name + ', ' : '') + 'photos');
-        var pc = document.createElement('canvas'); pc.width = p.w; pc.height = p.h;
-        drawPhoto(pc.getContext('2d'), p, g, false);
-        doc.image(pc, 640);
-        var cap = ['Photo ' + (i + 1) + (p.caption.trim() ? ' : ' + p.caption.trim() : '')];
-        doc.text(cap, 17, '#1E2830');
-        if(p.proj) doc.text(['Forme au sol calée sur les angles placés à la main (quadrillage 0,50 m)' + (p.rodOn ? ' ; tige P / démolition réglée à la main (repère visuel)' : '') + '.'], 14);
-        doc.pg.y += 14;
-      });
+      phPages(f, g, name, multi);
     });
   });
   return chain.then(function(){ return sigImages(); }).then(function(imgs){
@@ -4074,6 +4101,18 @@ function arError(text){
   $('input-errs').innerHTML = '<ul class="errs"><li>' + esc(text) + '</li></ul>';
   try{ window.alert(text); }catch(err){}
 }
+// PDF allégé : tableaux et photos seulement, sans vue 3D, plan, coupes ni élévations
+function noDraw(){ var el = $('no-draw'); return !!(el && el.checked); }
+(function(){
+  try{
+    var el = $('no-draw');
+    el.checked = localStorage.getItem('rctNoDraw') === '1';
+    el.addEventListener('change', function(){
+      try{ localStorage.setItem('rctNoDraw', el.checked ? '1' : '0'); }catch(err){}
+      $('pdf-msg').textContent = pdfHint();
+    });
+  }catch(err){}
+})();
 var ADMIN_CODE = 'GTRIVINO';
 var arReady = false, isAdmin = false;
 try{ isAdmin = localStorage.getItem('rctAdmin') === '1'; }catch(err){}
