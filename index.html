@@ -489,7 +489,7 @@ details.panel[open] summary{margin-bottom:12px}
 <script>
 (function(){
 'use strict';
-var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '2.9';
+var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '3.0';
 var APP_LABEL = APP_NAME + ' Ver.' + APP_VERSION;
 var TECH = 'Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif';
 var BODY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -4112,6 +4112,22 @@ function noDraw(){ var el = $('no-draw'); return !!(el && el.checked); }
       $('pdf-msg').textContent = pdfHint();
     });
   }catch(err){}
+})();
+// la barre d'action est fixée en bas et sa hauteur change (boutons qui passent à la ligne,
+// case « PDF sans les dessins », message) : on réserve toujours la place qu'elle occupe vraiment,
+// sinon elle recouvre le dernier bouton de la page (sur mobile, « Effacer » de la signature)
+(function(){
+  var bar = document.querySelector('.actionbar'), app = document.querySelector('.app');
+  if(!bar || !app) return;
+  function fitBar(){
+    var h = bar.getBoundingClientRect().height;
+    if(h > 0) app.style.paddingBottom = Math.round(h + 28) + 'px';
+  }
+  try{ if(window.ResizeObserver) new ResizeObserver(fitBar).observe(bar); }catch(err){}
+  window.addEventListener('resize', fitBar);
+  window.addEventListener('orientationchange', function(){ setTimeout(fitBar, 300); });
+  fitBar();
+  setTimeout(fitBar, 400);
 })();
 var ADMIN_CODE = 'GTRIVINO';
 var arReady = false, isAdmin = false;
