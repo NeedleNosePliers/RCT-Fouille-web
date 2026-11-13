@@ -189,6 +189,9 @@ details.panel[open] summary{margin-bottom:12px}
 .primary.secondary{background:var(--ink);color:var(--panel)}
 @media (max-width:480px){ .actionbar{gap:8px} .actionbar .primary{font-size:1rem;padding:12px 12px;flex:1 1 0;min-width:0} #pdf-msg{flex-basis:100%;text-align:center} }
 .primary:disabled{opacity:.5;cursor:wait}
+.actionbar .addf{font:600 1rem var(--tech);padding:11px 18px;border:1.5px solid var(--tape);border-radius:8px;background:transparent;color:var(--ink);cursor:pointer}
+.actionbar .addf:hover{background:var(--tape);color:#1E2830}
+@media (max-width:480px){ .actionbar .addf{flex:1 1 100%;padding:12px 10px} }
 #pdf-msg{font-size:.85rem;color:var(--muted);max-width:420px}
 #pdf-msg.bad{color:var(--err)}
 #report{display:none}
@@ -407,7 +410,6 @@ details.panel[open] summary{margin-bottom:12px}
   <div id="step-result" hidden>
     <div class="fbar">
       <div class="chips" id="chips" role="tablist" aria-label="Fouilles du relevé"></div>
-      <button type="button" class="btn on" id="add-f">+ Ajouter une fouille</button>
     </div>
     <section class="panel" id="recap" hidden style="margin-bottom:14px">
       <h2>Récapitulatif du chantier</h2>
@@ -487,6 +489,7 @@ details.panel[open] summary{margin-bottom:12px}
   <button type="button" class="primary" id="pdf" hidden>Exporter en PDF</button>
   <button type="button" class="primary secondary" id="mail" hidden>Envoyer par email</button>
   <button type="button" class="primary" id="mail-ready" hidden>Envoyer le PDF prêt</button>
+  <button type="button" class="addf" id="add-f" hidden>+ Ajouter une fouille</button>
   <label class="check nodraw" id="nodraw-row" hidden><input type="checkbox" id="no-draw"> PDF sans les dessins</label>
   <span id="pdf-msg" role="status" hidden>Dans la fenêtre d'impression, choisir « Enregistrer en PDF ».</span>
 </div>
@@ -496,7 +499,7 @@ details.panel[open] summary{margin-bottom:12px}
 <script>
 (function(){
 'use strict';
-var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '3.1';
+var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '3.2';
 var APP_LABEL = APP_NAME + ' Ver.' + APP_VERSION;
 var TECH = 'Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif';
 var BODY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -3156,6 +3159,7 @@ function showStep(step){
   if(step !== 'result') $('mail-ready').hidden = true;
   $('pdf-msg').hidden = step !== 'result';
   $('nodraw-row').hidden = step !== 'result';
+  $('add-f').hidden = step !== 'result';
   window.scrollTo(0, 0);
   if(step === 'input' && state.type === 'poly'){ polyFit(); polyDraw(); }
   if(step === 'result'){
