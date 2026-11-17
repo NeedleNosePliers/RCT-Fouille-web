@@ -418,6 +418,7 @@ details.panel[open] summary{margin-bottom:12px}
     </section>
     <div class="resbar">
       <button type="button" class="btn" id="back">← Modifier les cotes</button>
+      <button type="button" class="btn" id="dup-f">Dupliquer cette fouille</button>
       <h2 id="res-title"></h2>
       <button type="button" class="btn danger" id="del-f" hidden>Supprimer cette fouille</button>
     </div>
@@ -503,7 +504,7 @@ details.panel[open] summary{margin-bottom:12px}
 <script>
 (function(){
 'use strict';
-var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '3.4';
+var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '3.5';
 var APP_LABEL = APP_NAME + ' Ver.' + APP_VERSION;
 var TECH = 'Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif';
 var BODY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -3236,6 +3237,27 @@ $('cancel').addEventListener('click', function(){
   loadInputs(F());
   current = F().g;
   showStep('result');
+});
+$('dup-f').addEventListener('click', function(){
+  var src = F();
+  if(!src || !src.g) return;
+  // copie des cotes, de la forme, des portions, des côtés et des observations.
+  // Les photos restent propres à la fouille d'origine : elles ne sont pas reprises.
+  var f = newFouille();
+  f.type = src.type; f.mode = src.mode;
+  FIELDS.forEach(function(id){ f.vals[id] = src.vals[id] || ''; });
+  f.vals['in-name'] = src.name ? src.name + ' (copie)' : '';
+  f.name = f.vals['in-name'];
+  var nsrc = fNum(src);
+  fouilles.push(f);
+  cur = fouilles.length - 1;
+  current = null;
+  loadInputs(f);
+  $('in-title').textContent = 'Fouille ' + fNum(f) + ' (copie de la fouille ' + nsrc + ', sans les photos)';
+  showStep('input');
+  $('in-name').focus();
+  try{ $('in-name').select(); }catch(err){}
+  scheduleSave();
 });
 $('del-f').addEventListener('click', function(){
   var f = F();
