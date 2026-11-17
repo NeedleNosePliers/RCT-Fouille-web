@@ -503,7 +503,7 @@ details.panel[open] summary{margin-bottom:12px}
 <script>
 (function(){
 'use strict';
-var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '3.3';
+var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '3.4';
 var APP_LABEL = APP_NAME + ' Ver.' + APP_VERSION;
 var TECH = 'Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif';
 var BODY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -2188,7 +2188,13 @@ function onPhotoFiles(){
 }
 $('ph-input').addEventListener('change', onPhotoFiles);
 $('ph-cam').addEventListener('change', onPhotoFiles);
-$('bar-cam').addEventListener('click', function(){ $('ph-cam').click(); });
+// ouvrir l'appareil photo passe la page en arrière-plan : Android peut la recharger
+// au retour. On fige l'état avant de laisser la main, même sans modification en attente.
+function saveThenPick(el){ try{ saveNow(); }catch(err){} el.click(); }
+$('bar-cam').addEventListener('click', function(){ saveThenPick($('ph-cam')); });
+['ph-camlbl', 'ph-add'].forEach(function(id){
+  $(id).addEventListener('click', function(){ try{ saveNow(); }catch(err){} });
+});
 
 /* ================= Rapport PDF ================= */
 function frDate(v){ if(!v) return ''; var p = v.split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : v; }
