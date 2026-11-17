@@ -189,9 +189,10 @@ details.panel[open] summary{margin-bottom:12px}
 .primary.secondary{background:var(--ink);color:var(--panel)}
 @media (max-width:480px){ .actionbar{gap:8px} .actionbar .primary{font-size:1rem;padding:12px 12px;flex:1 1 0;min-width:0} #pdf-msg{flex-basis:100%;text-align:center} }
 .primary:disabled{opacity:.5;cursor:wait}
-.actionbar .addf{font:600 1rem var(--tech);padding:11px 18px;border:1.5px solid var(--tape);border-radius:8px;background:transparent;color:var(--ink);cursor:pointer}
+.actionbar .addrow{display:flex;gap:10px;align-items:center}
+.actionbar .addf{font:600 1rem var(--tech);padding:11px 16px;border:1.5px solid var(--tape);border-radius:8px;background:transparent;color:var(--ink);cursor:pointer}
 .actionbar .addf:hover{background:var(--tape);color:#1E2830}
-@media (max-width:480px){ .actionbar .addf{flex:1 1 100%;padding:12px 10px} }
+@media (max-width:480px){ .actionbar .addrow{flex:1 1 100%;gap:8px} .actionbar .addrow .addf{flex:1 1 0;min-width:0;padding:12px 6px;font-size:.92rem} }
 #pdf-msg{font-size:.85rem;color:var(--muted);max-width:420px}
 #pdf-msg.bad{color:var(--err)}
 #report{display:none}
@@ -489,7 +490,10 @@ details.panel[open] summary{margin-bottom:12px}
   <button type="button" class="primary" id="pdf" hidden>Exporter en PDF</button>
   <button type="button" class="primary secondary" id="mail" hidden>Envoyer par email</button>
   <button type="button" class="primary" id="mail-ready" hidden>Envoyer le PDF prêt</button>
-  <button type="button" class="addf" id="add-f" hidden>+ Ajouter une fouille</button>
+  <div class="addrow" id="addrow" hidden>
+    <button type="button" class="addf" id="add-f">+ Ajouter une fouille</button>
+    <button type="button" class="addf" id="bar-cam">Prendre une photo</button>
+  </div>
   <label class="check nodraw" id="nodraw-row" hidden><input type="checkbox" id="no-draw"> PDF sans les dessins</label>
   <span id="pdf-msg" role="status" hidden>Dans la fenêtre d'impression, choisir « Enregistrer en PDF ».</span>
 </div>
@@ -499,7 +503,7 @@ details.panel[open] summary{margin-bottom:12px}
 <script>
 (function(){
 'use strict';
-var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '3.2';
+var APP_NAME = 'RCT-Fouille-web', APP_VERSION = '3.3';
 var APP_LABEL = APP_NAME + ' Ver.' + APP_VERSION;
 var TECH = 'Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif';
 var BODY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -2143,6 +2147,7 @@ function renderPhotos(){
   $('ph-count').textContent = left > 0 ? (photos.length + ' / ' + MAXPH + ' photos.') : '4 photos : maximum atteint.';
   $('ph-add').hidden = left <= 0;
   $('ph-camlbl').hidden = left <= 0;
+  $('bar-cam').hidden = left <= 0;
 }
 function loadImage(file){
   return new Promise(function(resolve, reject){
@@ -2183,6 +2188,7 @@ function onPhotoFiles(){
 }
 $('ph-input').addEventListener('change', onPhotoFiles);
 $('ph-cam').addEventListener('change', onPhotoFiles);
+$('bar-cam').addEventListener('click', function(){ $('ph-cam').click(); });
 
 /* ================= Rapport PDF ================= */
 function frDate(v){ if(!v) return ''; var p = v.split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : v; }
@@ -3159,7 +3165,7 @@ function showStep(step){
   if(step !== 'result') $('mail-ready').hidden = true;
   $('pdf-msg').hidden = step !== 'result';
   $('nodraw-row').hidden = step !== 'result';
-  $('add-f').hidden = step !== 'result';
+  $('addrow').hidden = step !== 'result';
   window.scrollTo(0, 0);
   if(step === 'input' && state.type === 'poly'){ polyFit(); polyDraw(); }
   if(step === 'result'){
